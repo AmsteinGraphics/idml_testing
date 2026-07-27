@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Unpacked IDML working trees — reproducible by unzipping the tracked .idml files
+extracted/
+template_build/
+template_build_18/
+template_build_masters/
+template_build_tabproof/

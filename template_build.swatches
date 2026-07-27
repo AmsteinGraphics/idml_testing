@@ -1,0 +1,14 @@
+# Sanctioned swatches for THIS manual project — one swatch name per line.
+# Convention: this file lives next to the build dir as "<dir>.swatches"
+# (so it stays OUT of the packed .idml). Override with --swatches PATH.
+#
+#  * These names are KEPT by prune_swatches.py even if currently unused
+#    (the sanctioned palette a manual is allowed to draw from).
+#  * validate_idml.py FLAGS any applied color whose name is not in this list
+#    (structural None / Paper / Registration / $ID-managed are always allowed).
+#
+# DM32 house rule: Black + up to 3 spot colors, never more. Black is mandatory.
+Black
+PANTONE 292 U
+PANTONE 130 U
+PANTONE Warm Gray 1 U

@@ -1,0 +1,100 @@
+issue,dest_key,dest_heading,dest_story,present_kind,present_source_id,present_source_content,present_source_story,present_source_style
+missing_margin_number,480,1.1.1 Methods of navigation,u7b37,underlined_word,u36068,"chapter, section or paragraph number is referenced",u7b37,CharacterStyle/link
+missing_margin_number,85,14.12 Input and output,u7b37,underlined_word,u132e7,prompts for a value in a program,u7b37,CharacterStyle/link
+missing_margin_number,16973,21.2.4 Stack Align,u7b37,underlined_word,u4b899,DM32 Setup,u7b37,CharacterStyle/link
+missing_margin_number,134,SUMS,u7b37,underlined_word,u152aa,SUMS menu,u7b37,CharacterStyle/link
+missing_underlined_word,5094,10.1.1 Entering one-variable data,u7b37,margin_number,u3ed58,10.1.1,u3d798,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5095,10.1.3 Correcting data-entry errors,u7b37,margin_number,u3ed78,10.1.3,u3d7b6,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u158eb,11.4,u158d7,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u8025,11.4,u7c16,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u158c8,11.4,u1588e,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u159fb,11.4,u159e7,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u1599c,11.4,u15988,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u15977,11.4,u15963,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u269b3,11.4,u2695f,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,8,11.4 Viewing and selecting equations,u7b37,margin_number,u159c4,11.4,u159b0,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5119,11.4.2 To view a long equation by scrolling,u7b37,margin_number,u3fc7d,11.4.2,u3e69c,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5123,11.5.2 Evaluation using XEQ,u7b37,margin_number,u3ff45,11.5.2,u3e918,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5099,11.6.1 Variables in equations,u7b37,margin_number,u3ef61,11.6.1,u3d91f,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5120,11.6.3 Functions in equations,u7b37,margin_number,u3fdbf,11.6.3,u3e74d,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5098,11.6.4 Parentheses in equations,u7b37,margin_number,u3ef32,11.6.4,u3d8e6,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5098,11.6.4 Parentheses in equations,u7b37,margin_number,u3ef43,11.6.4,u3d903,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,1,14 Basic programming,u7b37,margin_number,u800c,14,u7b93,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5121,14.13.2 Manually halting a running program,u7b37,margin_number,u3fea1,14.13.2,u3e831,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,13,14.15.2 Programs catalog,u7b37,margin_number,u9f82,14.15.2,u9f47,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5116,14.2.1 Writing the program,u7b37,margin_number,u3fa61,14.2.1,u3e43f,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5116,14.2.1 Writing the program,u7b37,margin_number,u3fbed,14.2.1,u3e60f,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5112,14.2.2 Executing the program,u7b37,margin_number,u3f792,14.2.2,u3e07f,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5124,14.5 Executing a labeled program,u7b37,margin_number,u3ff63,14.5,u3e934,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5125,14.6 Executing a remote label (Remote XEQ),u7b37,margin_number,u3ff77,14.6,u3e951,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5108,"15.4.2 Loops with counters (DSE, ISG)",u7b37,margin_number,u3f8f9,15.4.2,u3e1f4,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5108,"15.4.2 Loops with counters (DSE, ISG)",u7b37,margin_number,u3f587,15.4.2,u3de5d,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,7,15.5 Flags,u7b37,margin_number,u8020,15.5,u7bfe,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,208,15.5.3 Using flags,u7b37,margin_number,u3f72c,15.5.3,u3dfed,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,208,15.5.3 Using flags,u7b37,margin_number,u50a2f,15.5.3,u509d1,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5115,2.1 Turning the calculator on and off,u7b37,margin_number,u3fa2b,2.1,u3e3e9,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,6,2.3.2 Main area and shift keys,u7b37,margin_number,u802f,2.3.2,u7c46,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5101,2.3.4 C key,u7b37,margin_number,u3f0a4,2.3.3,u3da91,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,3135,24.4.6 Defaults after clearing,u7b37,margin_number,u39da8,24.4.5,u39d93,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,2,3.2 Stack basics,u7b37,margin_number,u8011,3.2,u7bb5,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,167,4.2.1 Parts menu,u7b37,margin_number,u3fa3c,4.2.1,u3e406,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5128,4.2.11 x?y comparison menu,u7b37,margin_number,u400b5,4.2.11,u3ea8c,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5129,4.2.12 x?0 comparison menu,u7b37,margin_number,u4026c,4.2.12,u40248,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,168,4.2.3 Linear regression menu,u7b37,margin_number,u3f98d,4.2.3,u3e2e3,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,169,4.2.4 Mean menu,u7b37,margin_number,u4006f,4.2.4,u3ea34,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,170,4.2.5 Deviation menu,u7b37,margin_number,u3fc38,4.2.5,u3e663,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,165,4.2.6 Summation menu,u7b37,margin_number,u3feb1,4.2.6,u3e84e,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,165,4.2.6 Summation menu,u7b37,margin_number,u3f9fb,4.2.6,u3e3b0,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,165,4.2.6 Summation menu,u7b37,margin_number,u3cf86,4.2.6,u3cf5a,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5109,5.1.1 Entering exponents of ten,u7b37,margin_number,u3f5a6,5.1.1,u3de79,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5117,6.1 Storing and recalling numbers,u7b37,margin_number,u3fe07,6.1,u3fdf3,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5117,6.1 Storing and recalling numbers,u7b37,margin_number,u3fb5e,6.1,u3e545,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,12,6.3 Reviewing variables in the VAR catalog,u7b37,margin_number,u9f3c,6.3,u9ede,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5127,6.6 Exchanging any variable with x,u7b37,margin_number,u40085,6.6,u3ea53,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5114,6.7 Variable i,u7b37,margin_number,u3f86b,6.7,u3e148,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3f027,7.3,u3d990,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3f97c,7.3,u3f968,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3ecdc,7.3,u3d726,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3f95f,7.3,u3e2a9,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3f66d,7.3,u3df09,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5092,7.3 Exponential and logarithmic,u7b37,margin_number,u3f68d,7.3,u3f679,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3f81f,7.6,u3e0f2,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3efdc,7.6,u3d973,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3eff8,7.6,u3efe4,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3fd8f,7.6,u3e715,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3f4d3,7.6,u3f4bf,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3f016,7.6,u3f001,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5100,7.6 Hyperbolic,u7b37,margin_number,u3ff1d,7.6,u3ff09,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5093,7.7 Percentage,u7b37,margin_number,u3ecfb,7.7,u3d742,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5093,7.7 Percentage,u7b37,margin_number,u3ed1d,7.7,u3ed09,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5096,7.8.1 Coordinates conversion,u7b37,margin_number,u402a3,7.8.1,u3ec54,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5096,7.8.1 Coordinates conversion,u7b37,margin_number,u3ee69,7.8.1,u3d89a,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5113,7.8.2 Time conversion,u7b37,margin_number,u3f832,7.8.2,u3e110,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5113,7.8.2 Time conversion,u7b37,margin_number,u3f857,7.8.2,u3f843,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5107,7.8.3 Angular conversion,u7b37,margin_number,u3fadd,7.8.3,u3e4d2,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5107,7.8.3 Angular conversion,u7b37,margin_number,u3f534,7.8.3,u3ddf0,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f1da,7.8.4,u3dbd0,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f919,7.8.4,u3e230,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f0d9,7.8.4,u3dacb,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f6b1,7.8.4,u3df42,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f909,7.8.4,u3e213,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f88b,7.8.4,u3e181,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f740,7.8.4,u3e009,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5102,7.8.4 Unit conversion,u7b37,margin_number,u3f93f,7.8.4,u3e26e,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5106,7.9.3 Probability menu,u7b37,margin_number,u3f47e,7.9.3,u3dd61,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5106,7.9.3 Probability menu,u7b37,margin_number,u3fa4c,7.9.3,u3e422,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5106,7.9.3 Probability menu,u7b37,margin_number,u3fc9d,7.9.3,u3fc89,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5106,7.9.3 Probability menu,u7b37,margin_number,u3fb22,7.9.3,u3e527,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5103,8.1 Complex operations,u7b37,margin_number,u3f1f8,8.1,u3dbef,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f3bd,8.1.1,u3f3a9,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f2f7,8.1.1,u3f202,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f33b,8.1.1,u3f327,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f399,8.1.1,u3f385,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f37c,8.1.1,u3f368,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f317,8.1.1,u3f303,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5104,8.1.1 One-number complex operations,u7b37,margin_number,u3f35e,8.1.1,u3f34a,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5105,8.1.2 Two-number complex operations,u7b37,margin_number,u3f413,8.1.2,u3f3ff,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5105,8.1.2 Two-number complex operations,u7b37,margin_number,u3f454,8.1.2,u3f440,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5105,8.1.2 Two-number complex operations,u7b37,margin_number,u3f3f1,8.1.2,u3f3dd,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5105,8.1.2 Two-number complex operations,u7b37,margin_number,u3f3ce,8.1.2,u3f21e,CharacterStyle/code_styles%3across_ref
+missing_underlined_word,5105,8.1.2 Two-number complex operations,u7b37,margin_number,u3f436,8.1.2,u3f422,CharacterStyle/code_styles%3across_ref

@@ -1,0 +1,47 @@
+status,dest_key,dest_heading,num_margin_refs,refs_in_table,refs_in_body,sibling_word_keys
+review_body_reference,6,2.3.2 Main area and shift keys,1,0,1,
+review_body_reference,165,4.2.6 Summation menu,3,2,1,
+benign_table_reference,5094,10.1.1 Entering one-variable data,1,1,0,
+benign_table_reference,5095,10.1.3 Correcting data-entry errors,1,1,0,
+benign_table_reference,5119,11.4.2 To view a long equation by scrolling,1,1,0,
+benign_table_reference,5123,11.5.2 Evaluation using XEQ,1,1,0,
+benign_table_reference,5099,11.6.1 Variables in equations,1,1,0,
+benign_table_reference,5120,11.6.3 Functions in equations,1,1,0,
+benign_table_reference,5098,11.6.4 Parentheses in equations,2,2,0,
+benign_table_reference,5121,14.13.2 Manually halting a running program,1,1,0,
+benign_table_reference,5116,14.2.1 Writing the program,2,2,0,
+benign_table_reference,5112,14.2.2 Executing the program,1,1,0,
+benign_table_reference,5124,14.5 Executing a labeled program,1,1,0,
+benign_table_reference,5108,"15.4.2 Loops with counters (DSE, ISG)",2,2,0,
+benign_table_reference,208,15.5.3 Using flags,2,2,0,
+benign_table_reference,5115,2.1 Turning the calculator on and off,1,1,0,
+benign_table_reference,5101,2.3.4 C key,1,1,0,
+benign_table_reference,167,4.2.1 Parts menu,1,1,0,
+benign_table_reference,5128,4.2.11 x?y comparison menu,1,1,0,
+benign_table_reference,5129,4.2.12 x?0 comparison menu,1,1,0,
+benign_table_reference,168,4.2.3 Linear regression menu,1,1,0,
+benign_table_reference,169,4.2.4 Mean menu,1,1,0,
+benign_table_reference,170,4.2.5 Deviation menu,1,1,0,
+benign_table_reference,5109,5.1.1 Entering exponents of ten,1,1,0,
+benign_table_reference,5117,6.1 Storing and recalling numbers,2,2,0,
+benign_table_reference,5127,6.6 Exchanging any variable with x,1,1,0,
+benign_table_reference,5114,6.7 Variable i,1,1,0,
+benign_table_reference,5092,7.3 Exponential and logarithmic,6,6,0,
+benign_table_reference,5100,7.6 Hyperbolic,7,7,0,
+benign_table_reference,5093,7.7 Percentage,2,2,0,
+benign_table_reference,5096,7.8.1 Coordinates conversion,2,2,0,
+benign_table_reference,5113,7.8.2 Time conversion,2,2,0,
+benign_table_reference,5107,7.8.3 Angular conversion,2,2,0,
+benign_table_reference,5102,7.8.4 Unit conversion,8,8,0,
+benign_table_reference,5106,7.9.3 Probability menu,4,4,0,
+benign_table_reference,5103,8.1 Complex operations,1,1,0,
+benign_table_reference,5104,8.1.1 One-number complex operations,7,7,0,
+benign_table_reference,5105,8.1.2 Two-number complex operations,5,5,0,
+false_positive_word_via_sibling,8,11.4 Viewing and selecting equations,8,2,6,144
+false_positive_word_via_sibling,1,14 Basic programming,1,0,1,48
+false_positive_word_via_sibling,13,14.15.2 Programs catalog,1,1,0,107
+false_positive_word_via_sibling,5125,14.6 Executing a remote label (Remote XEQ),1,1,0,193
+false_positive_word_via_sibling,7,15.5 Flags,1,0,1,74
+false_positive_word_via_sibling,3135,24.4.6 Defaults after clearing,1,0,1,30383
+false_positive_word_via_sibling,2,3.2 Stack basics,1,0,1,120
+false_positive_word_via_sibling,12,6.3 Reviewing variables in the VAR catalog,1,1,0,108
