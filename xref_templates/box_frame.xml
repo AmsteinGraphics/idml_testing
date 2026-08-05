@@ -1,0 +1,41 @@
+<TextFrame Self="u1555" ParentStory="u1543" PreviousTextFrame="n" NextTextFrame="n" ContentType="TextType" ParentInterfaceChangeCount="138508 494612773 138558 2096433122" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" OverriddenPageItemProps="" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" FlexItemWidthMode="FlexFixed" FlexItemHeightMode="FlexFixed" FillColor="Swatch/None" FillTint="-1" CornerRadius="12" StrokeWeight="0" MiterLimit="4" EndCap="ButtEndCap" EndJoin="MiterEndJoin" StrokeType="StrokeStyle/$ID/Solid" LeftLineEnd="None" RightLineEnd="None" StrokeColor="Swatch/None" StrokeTint="-1" GradientFillStart="-28.77165354324802 -7.202834645805154" GradientFillLength="41.102362204606266" GradientFillAngle="0" GradientStrokeStart="-28.77165354324802 -7.202834645805154" GradientStrokeLength="41.102362204606266" GradientStrokeAngle="0" GapColor="Swatch/None" GapTint="-1" StrokeAlignment="CenterAlignment" Locked="false" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/cross_ref_block" CornerOption="None" Visible="true" Name="$ID/" TopLeftCornerOption="None" TopRightCornerOption="None" BottomLeftCornerOption="None" BottomRightCornerOption="None" TopLeftCornerRadius="12" TopRightCornerRadius="12" BottomLeftCornerRadius="12" BottomRightCornerRadius="12" ArrowHeadAlignment="InsidePath" LeftArrowHeadScale="100" RightArrowHeadScale="100" ItemTransform="1 0 0 1 16.015748031555145 7.202834645805115">
+					<Properties>
+						<PathGeometry>
+							<GeometryPathType PathOpen="false">
+								<PathPointArray>
+									<PathPointType Anchor="-16.015748031555145 -17.521897414780785" LeftDirection="-16.015748031555145 -17.521897414780785" RightDirection="-16.015748031555145 -17.521897414780785" />
+									<PathPointType Anchor="-16.015748031555145 -7.2028346458051145" LeftDirection="-16.015748031555145 -7.2028346458051145" RightDirection="-16.015748031555145 -7.2028346458051145" />
+									<PathPointType Anchor="12.33070866135824 -7.2028346458051145" LeftDirection="12.33070866135824 -7.2028346458051145" RightDirection="12.33070866135824 -7.2028346458051145" />
+									<PathPointType Anchor="12.33070866135824 -17.521897414780785" LeftDirection="12.33070866135824 -17.521897414780785" RightDirection="12.33070866135824 -17.521897414780785" />
+								</PathPointArray>
+							</GeometryPathType>
+						</PathGeometry>
+					</Properties>
+					<TextFramePreference TextColumnCount="1" FirstBaselineOffset="AscentOffset" MinimumFirstBaselineOffset="0" TextColumnMaxWidth="0" AutoSizingType="Off" AutoSizingReferencePoint="CenterPoint" UseMinimumHeightForAutoSizing="false" MinimumHeightForAutoSizing="0" UseMinimumWidthForAutoSizing="false" MinimumWidthForAutoSizing="0" UseNoLineBreaksForAutoSizing="false" ColumnRuleOverride="false" ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeWidth="1" ColumnRuleStrokeColor="Color/Black" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false" FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="true" FootnotesMinimumSpacing="0" FootnotesSpaceBetween="0">
+						<Properties>
+							<InsetSpacing type="list">
+								<ListItem type="unit">0</ListItem>
+								<ListItem type="unit">0</ListItem>
+								<ListItem type="unit">0</ListItem>
+								<ListItem type="unit">0</ListItem>
+							</InsetSpacing>
+						</Properties>
+					</TextFramePreference>
+					<BaselineFrameGridOption UseCustomBaselineFrameGrid="false" StartingOffsetForBaselineFrameGrid="0" BaselineFrameGridRelativeOption="TopOfInset" BaselineFrameGridIncrement="12">
+						<Properties>
+							<BaselineFrameGridColor type="enumeration">LightBlue</BaselineFrameGridColor>
+						</Properties>
+					</BaselineFrameGridOption>
+					<TextFrameFootnoteOptionsObject EnableOverrides="false" SpanFootnotesAcross="true" MinimumSpacingOption="0" SpaceBetweenFootnotes="0" />
+					<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None">
+						<Properties>
+							<TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" />
+						</Properties>
+					</TextWrapPreference>
+					<ObjectExportOption EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault" EpubAriaRole="$ID/" EpubAriaLabel="$ID/" EpubAriaLabelSourceType="AutomaticARIALabel" AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
+						<Properties>
+							<AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+							<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+						</Properties>
+					</ObjectExportOption>
+				</TextFrame>
