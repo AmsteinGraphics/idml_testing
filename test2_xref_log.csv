@@ -1,0 +1,57 @@
+action,word,dest_key,number,target,story,reason
+box,/c value,113,1.4.4,Setting maximum denominator,uf0d,resolvable
+box,current decimal format,66,1.3,Decimal display,uf0d,resolvable
+box,digit-entry,83,1.1,How digit-entry works,uf0d,resolvable
+box,display format,69,1.3.1,Display format,uf0d,resolvable
+box,except RND,110,1.4.7,Rounding fractions,uf0d,resolvable
+box,FIX setting,69,1.3.1,Display format,u130b,resolvable
+box,fraction,77,1.4,Fraction display,u130b,resolvable
+box,Fraction display,77,1.4,Fraction display,uf0d,resolvable
+box,fraction flags,78,1.4.5,Fraction format,uf0d,resolvable
+box,Fraction format,78,1.4.5,Fraction format,uf0d,resolvable
+box,Fraction format,78,1.4.5,Fraction format,uf0d,resolvable
+box,fraction format,78,1.4.5,Fraction format,uf0d,resolvable
+box,fraction format,78,1.4.5,Fraction format,uf0d,resolvable
+box,Function SHOW to display long numbers,81,1.5,Function SHOW to display long numbers,uf0d,resolvable
+box,Function SHOW to display long numbers,81,1.5,Function SHOW to display long numbers,uf0d,resolvable
+box,Function SHOW to display long numbers,81,1.5,Function SHOW to display long numbers,u1158,resolvable
+box,keep the SHOW box on display,198,1.5.2,SHOW hold,uf0d,resolvable
+box,maximum denominator,113,1.4.4,Setting maximum denominator,uf0d,resolvable
+box,one-number function,99,3.2.1,One-number functions,uf0d,resolvable
+box,Rounding,109,3.11,Rounding,uf0d,resolvable
+box,Rounding fractions,110,1.4.7,Rounding fractions,u130b,resolvable
+box,setting of maximum denominator,113,1.4.4,Setting maximum denominator,uf0d,resolvable
+box,SHOW box,81,1.5,Function SHOW to display long numbers,uf0d,resolvable
+box,STO and RCL arithmetic,5118,2.4,STO and RCL arithmetic,u1158,resolvable
+box,two-number function,197,3.2.2,Two-number functions,uf0d,resolvable
+box,VAR catalog,108,2.3,Reviewing variables in the VAR catalog,uf0d,resolvable
+suppressed,angular mode,0,,,u130b,target-not-in-document
+suppressed,annunciator,0,,,u1158,target-not-in-document
+suppressed,Behavior differences with HP-32SII,0,,,uf0d,target-not-in-document
+suppressed,Calculator State,0,,,u130b,target-not-in-document
+suppressed,Clearing functions,0,,,uf0d,target-not-in-document
+suppressed,Clearing in Calculator mode,0,,,u1158,target-not-in-document
+suppressed,complex operation,0,,,u130b,target-not-in-document
+suppressed,control fraction display programmatically,0,,,uf0d,target-not-in-document
+suppressed,disables stack lift,0,,,uf0d,target-not-in-document
+suppressed,DISP menu,0,,,uf0d,target-not-in-document
+suppressed,Equation list,0,,,uf0d,target-not-in-document
+suppressed,flag,0,,,uf0d,target-not-in-document
+suppressed,flag,0,,,uf0d,target-not-in-document
+suppressed,font,0,,,uf0d,target-not-in-document
+suppressed,Indirect addressing,0,,,u1158,target-not-in-document
+suppressed,indirect addressing,0,,,u1158,target-not-in-document
+suppressed,LASTx register,0,,,uf0d,target-not-in-document
+suppressed,menu,0,,,u130b,target-not-in-document
+suppressed,message,0,,,uf0d,target-not-in-document
+suppressed,MODES menu,0,,,uf0d,target-not-in-document
+suppressed,navigation key,0,,,u1158,target-not-in-document
+suppressed,navigation keys,0,,,u1158,target-not-in-document
+suppressed,Probability menu,0,,,u130b,target-not-in-document
+suppressed,Probability menu,0,,,u130b,target-not-in-document
+suppressed,Program mode,0,,,uf0d,target-not-in-document
+suppressed,stack lift,0,,,u130b,target-not-in-document
+suppressed,Stack registers,0,,,u1158,target-not-in-document
+suppressed,statistics registers,0,,,u1158,target-not-in-document
+suppressed,to view long equations,0,,,uf0d,target-not-in-document
+suppressed,warning annunciator,0,,,uf0d,target-not-in-document

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="21.3">
-	<Story Self="u1543" AppliedTOCStyle="n" UserText="true" IsEndnoteStory="false" TrackChanges="false" StoryTitle="$ID/" AppliedNamedGrid="n">
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="21.4">
+	<Story Self="u12346" AppliedTOCStyle="n" UserText="true" IsEndnoteStory="false" TrackChanges="false" StoryTitle="$ID/" AppliedNamedGrid="n">
 		<StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType" StoryOrientation="Horizontal" StoryDirection="LeftToRightDirection" />
 		<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/cross_ref_par">
 			<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/code_styles%3across_ref" AppliedLanguage="$ID/English: USA">
-				<CrossReferenceSource Self="u2280" AppliedFormat="u1520" Name="Hyperlien 595" Hidden="false" AppliedCharacterStyle="n">
-					<Content>7.2.1</Content>
+				<CrossReferenceSource Self="u12373" AppliedFormat="u6bcb" Name="Hyperlien 349" Hidden="false" AppliedCharacterStyle="n">
+					<Content>5.3.1</Content>
 				</CrossReferenceSource>
 			</CharacterStyleRange>
 		</ParagraphStyleRange>

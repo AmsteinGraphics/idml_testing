@@ -84,8 +84,8 @@ def set_digit(story_xml, digit):
                   story_xml, count=1)
 
 
-def build_chapter_master(build, basetabs_xml, k, slot, title, base_self):
-    """Return (master_filename, master_xml, [(story_filename, story_xml)]) for chapter k."""
+def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint):
+    """Return (master_filename, master_xml, [(story_filename, story_xml)], master_self)."""
     t = basetabs_xml
     # --- prune tab rectangles to this slot ---
     def keep_rect(m):
@@ -111,19 +111,20 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self):
         return blk
     t = re.sub(r'<TextFrame\b[^>]*>.*?</TextFrame>', keep_num, t, flags=re.S)
 
-    # --- fresh ids (uppercase => never collide with InDesign u<hex> ids) ---
+    # --- fresh ids: lowercase-hex u<hex>, like InDesign's own. Uppercase ids are
+    # tolerated by older InDesign but CRASH InDesign 2026 (v21) on open. ---
     ren = {}
-    ren[re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1)] = f"uCMm{k}"
-    pages = re.findall(r'<Page\b[^>]*Self="([^"]+)"', t)
-    for i, p in enumerate(pages):
-        ren[p] = f"uCMp{i}k{k}"
-    for i, rself in enumerate(re.findall(r'<Rectangle\b[^>]*Self="([^"]+)"', t)):
-        ren[rself] = f"uCMr{i}k{k}"
-    for i, fself in enumerate(re.findall(r'<TextFrame\b[^>]*Self="([^"]+)"', t)):
-        ren[fself] = f"uCMf{i}k{k}"
+    master_self = mint()
+    ren[re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1)] = master_self
+    for p in re.findall(r'<Page\b[^>]*Self="([^"]+)"', t):
+        ren[p] = mint()
+    for rself in re.findall(r'<Rectangle\b[^>]*Self="([^"]+)"', t):
+        ren[rself] = mint()
+    for fself in re.findall(r'<TextFrame\b[^>]*Self="([^"]+)"', t):
+        ren[fself] = mint()
     story_ren = {}
     for side, sid in kept_stories:
-        story_ren[sid] = f"uCMs{side}k{k}"
+        story_ren[sid] = mint()
     ren.update(story_ren)
 
     for old, new in ren.items():
@@ -131,7 +132,7 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self):
 
     # rename + rebase
     t = re.sub(r'(<MasterSpread\b[^>]*?\bName=")[^"]*(")', rf'\g<1>S{k}-{S.xml_escape(title)}\g<2>', t, count=1)
-    t = re.sub(r'(<MasterSpread\b[^>]*Self="uCMm%d"[^>]*OverriddenPageItemProps=")[^"]*(")' % k,
+    t = re.sub(r'(<MasterSpread\b[^>]*Self="%s"[^>]*OverriddenPageItemProps=")[^"]*(")' % re.escape(master_self),
                r'\g<1>\g<2>', t)
 
     # --- clone the two number stories with fresh ids + digit=k ---
@@ -143,7 +144,7 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self):
         sx = set_digit(sx, str(k))
         story_files.append((f"Story_{new_sid}.xml", sx, new_sid))
 
-    return f"MasterSpread_uCMm{k}.xml", t, story_files
+    return f"MasterSpread_{master_self}.xml", t, story_files, master_self
 
 
 def main():
@@ -161,6 +162,20 @@ def main():
                           master_by_name(build, "B-Base")[1]).group(1)
     _, basetabs_xml = master_by_name(build, "BT-BaseTabs")
 
+    # mint lowercase-hex ids that don't collide with anything already in the tree
+    existing = set()
+    for f in glob.glob(os.path.join(build, "**", "*.xml"), recursive=True):
+        existing |= set(re.findall(r'"(u[0-9a-fA-F]+)"', open(f, encoding="utf-8").read()))
+    counter = [0x800000]
+
+    def mint():
+        while True:
+            c = "u%x" % counter[0]
+            counter[0] += 1
+            if c not in existing:
+                existing.add(c)
+                return c
+
     print(f"{len(secs)} chapters; Base={base_self}")
     plan = []
     for i, s in enumerate(secs):
@@ -170,9 +185,10 @@ def main():
         # pages this chapter covers, in order
         start = c["page_order"]
         page_selfs = [p["self"] for p in ordered_pages[start:start + s["length"]]]
-        fname, mxml, stories = build_chapter_master(build, basetabs_xml, k, slot, c["title"], base_self)
+        fname, mxml, stories, master_self = build_chapter_master(
+            build, basetabs_xml, k, slot, c["title"], base_self, mint)
         plan.append(dict(k=k, slot=slot, title=c["title"], fname=fname, mxml=mxml,
-                         stories=stories, page_selfs=page_selfs, master_self=f"uCMm{k}"))
+                         stories=stories, page_selfs=page_selfs, master_self=master_self))
         fill = {0: "pure 292", 25: "pure Black"}.get(slot, f"tab_{slot:02d}")
         print(f"  S{k}-{c['title'][:40]:40} slot{slot} fill={fill:10} "
               f"digit={k} pages={page_selfs[0]}..+{len(page_selfs)-1}")
