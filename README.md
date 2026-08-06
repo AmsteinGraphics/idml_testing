@@ -3,13 +3,16 @@
 Python tooling for inspecting, repairing and generating [IDML](https://www.adobe.com/devnet/indesign/documentation.html)
 (InDesign Markup Language) packages, built around the SwissMicros **DM32 print manual**.
 
-Two jobs:
+Three jobs:
 
 1. **Audit the shipped manual** — resolve and check its "oblique link" cross-reference
    system (underlined word + margin paragraph number pointing at one anchor).
 2. **Derive a reusable blank template** — keep the whole design skeleton (styles,
    colours, masters, fonts, XML tags, cross-reference and index engines), strip all
    content, and regenerate the numbered thumb-tab index natively for any chapter count.
+3. **Produce a manual from a submission** — take content poured into the kit and wire up
+   what the design system needs: section numbering, one InDesign section per chapter,
+   a per-chapter thumb tab, and the oblique-reference margin boxes.
 
 Everything is plain `python3` with the standard library only. No InDesign and no
 `unzip` are required to build; InDesign is only needed to *visually* verify output.
@@ -46,6 +49,8 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 
 ## Toolchain
 
+### Deriving the template
+
 | script | what it does | run |
 |---|---|---|
 | `make_template.py` | strip content → blank kit: all styles / masters / colours / tags kept, one blank donor spread, 114 master-referenced stories | `make_template.py extracted template_build` |
@@ -54,14 +59,30 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 | `prune_styles.py` | report/remove styles dead in the **full manual** (not the empty template) with closure over every style-reference edge | `prune_styles.py template_build --ref extracted --dry-run` |
 | `bake_masters.py` | recolour every tab in every tab master from the placed `.ai` to native mixed-ink swatches, preserving geometry, bleed and master filiation | `bake_masters.py template_build template_build_masters` |
 | `make_18ch.py` | derive an 18-chapter template: prune masters, respace + recolour tabs, mirror tab+number onto both pages, write digits 1–18 | `make_18ch.py` |
+| `bake_tab_strip.py`, `tab_strip.py` | earlier tab-strip proof and compute-only ink table — superseded by `bake_masters.py` | — |
+
+### Producing a manual
+
+| script | what it does | run |
+|---|---|---|
+| `fix_numbering.py` | join `titles:lvl2`/`lvl3` to the `dm32_list` numbered list so multi-level section numbering counts up | `fix_numbering.py <dir>` |
+| `sectionize.py` | detect chapters (`titles:lvl2` headings), locate each one's first page geometrically, write one `<Section>` per chapter | `sectionize.py <dir> [--dry-run]` |
+| `apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
+| `build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
+| `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
+| `strip_xref_boxes.py` | inverse of `build_xref_boxes.py` — remove all margin boxes to manufacture a boxless submission | `strip_xref_boxes.py <dir> [--dry-run]` |
+
+### Shared
+
+| script | what it does | run |
+|---|---|---|
 | `fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
 | `fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
 | `validate_idml.py` | referential-integrity check + swatch-whitelist + underline enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
 | `repack.py` | folder → valid IDML (`mimetype` first and stored, rest deflated) | `repack.py <dir> <out.idml>` |
 | `resolve_xref.py` | cross-reference resolver / auditor | `resolve_xref.py --audit` |
-| `bake_tab_strip.py`, `tab_strip.py` | earlier tab-strip proof and compute-only ink table — superseded by `bake_masters.py` | — |
 
-### Build pipeline
+### Template build pipeline
 
 From a freshly unpacked `extracted/`:
 
@@ -78,6 +99,56 @@ python3 make_18ch.py                                             # -> manual_tem
 
 python3 validate_idml.py template_build_masters                  # validate any build dir
 ```
+
+### Forward content production
+
+The kit is **`manual_template_nosection.idml`** — 7 masters, native mixed-ink tabs, no
+`.ai`, no chapter masters (`apply_tabs.py` generates those per chapter). A submission is
+that kit with content poured in: it arrives with underlined trigger words already wired to
+destination anchors, but no margin boxes, no sections, no tabs, and usually only
+`titles:lvl4` joined to the numbered list.
+
+```bash
+python3 -c "import zipfile; zipfile.ZipFile('submission.idml').extractall('build')"
+
+python3 fix_numbering.py  build      # lvl2/lvl3 -> dm32_list, so numbering counts up
+python3 sectionize.py     build      # one <Section> per titles:lvl2 chapter
+python3 fix_tab_strip.py  build      # once per kit; no-op afterwards
+python3 apply_tabs.py     build      # S<k> master per chapter, applied to its pages
+python3 build_xref_boxes.py build --jsx   # suppress + log dead links, defer the boxes
+python3 validate_idml.py  build
+python3 repack.py         build out.idml
+
+# then, in InDesign:
+#   open out.idml, run place_xref_boxes.jsx, export IDML
+python3 -c "import zipfile; zipfile.ZipFile('out_processed.idml').extractall('build2')"
+python3 fix_underlines.py build2     # InDesign reintroduces local underline overrides
+python3 validate_idml.py  build2
+python3 repack.py         build2 final.idml
+```
+
+Order matters: `fix_numbering` must run before `sectionize` (section markers come from
+the numbered headings), and `apply_tabs` needs the sections in place. `fix_tab_strip`
+must precede `apply_tabs`, which refuses a kit whose strip is incomplete.
+
+Things learned the hard way:
+
+- **Margin boxes cannot be authored in IDML.** A hand-written anchored `<TextFrame>`
+  never binds on import — InDesign drops or misplaces it. They have to be created
+  natively, hence `--jsx` plus `place_xref_boxes.jsx`. Re-running the script rebuilds the
+  whole set, so it's safe to iterate.
+- **Uppercase hex `Self` ids crash InDesign 2026** and break anchor binding. Mint
+  lowercase only.
+- **A master is identified by `NamePrefix` + `BaseName`**, not `Name`. Cloning a master
+  and renaming only `Name` leaves duplicate identities, which InDesign 2026 rejects.
+- **A story belongs to exactly one frame chain.** Cloning a frame without cloning its
+  story leaves two unthreaded frames sharing it, which corrupts the document.
+- **Dead links get suppressed, not dropped.** Cross-excerpt links copied from the full
+  manual point at anchors that aren't in this document; `build_xref_boxes.py` unwraps the
+  `HyperlinkTextSource`, removes the `link` style, keeps the word, and logs every case to
+  `<build>.xref_log.csv` for eyeballing. `--keep-dead` leaves them alone.
+
+For the 3-chapter test submission: 26 boxes built, 30 dead links suppressed.
 
 ### Auditing cross-references
 
@@ -242,7 +313,10 @@ Collected the hard way; all of these will silently produce a file InDesign rejec
 
 Done: broken-link repair · blank-kit template (opens in InDesign) · metadata scrub ·
 swatch prune · style analysis · native mixed-ink tabs at N=26 with the `.ai` fully
-removed · 18-chapter parametric build with numbered tabs on both pages.
+removed · 18-chapter parametric build with numbered tabs on both pages · forward content
+pipeline (sections, tabs, oblique-ref boxes via JSX) · tab strip repaired to 52/52 across
+all templates · style-driven underline enforcement · **InDesign 2026 crash fixed and
+confirmed** (duplicate master identity + frames sharing a story).
 
 Open:
 
@@ -252,3 +326,8 @@ Open:
   style; a left-aligned variant may look better.
 - Generalise `make_18ch.py` (a hardcoded N=18 instance) into a real
   `configure_chapters.py` driven by a chapter-title manifest.
+- `apply_tabs.py` reuses the kit's uniform N=26 tab grid as-is. A manual with a different
+  chapter count needs the strip re-tweened (that's what `make_18ch.py` does for N=18).
+- The kit's `StoryList` names a story `u98` that doesn't exist. Harmless — it predates
+  the forward pipeline and InDesign opens it fine — but `validate_idml.py` reports it on
+  every run.
