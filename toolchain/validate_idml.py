@@ -314,6 +314,35 @@ check(not dup_ident,
       + ", ".join(f"{p}-{b} x{len(v)}" for (p, b), v in list(dup_ident.items())[:4])
       + (" ..." if len(dup_ident) > 4 else ""))
 
+# ---- 10e. one story per chapter --------------------------------------------
+# Chapter detection is per STORY, not per heading, because a mid-story heading's
+# page cannot be known without composing the text. A story holding several
+# chapter headings therefore yields one chapter, and the extras get no tab and no
+# section — the count just comes up short with nothing said.
+_chap = _conf["chapter_style"]
+if _chap:
+    _enc = _chap.replace(":", "%3a")
+    crowded = {}
+    for f in stories:
+        raw = reads(f)
+        if _enc not in raw:
+            continue
+        n = 0
+        for m in re.finditer(r'<ParagraphStyleRange\b[^>]*AppliedParagraphStyle='
+                             r'"ParagraphStyle/' + re.escape(_enc) + r'"[^>]*>(.*?)'
+                             r'</ParagraphStyleRange>', raw, re.S):
+            body = m.group(1)
+            n += len([x for x in re.split(r'<Br\b[^>]*/>', body)
+                      if re.search(r'<Content>\s*\S', x)])
+        if n > 1:
+            sid = re.search(r'<Story\b[^>]*Self="([^"]+)"', raw)
+            crowded[sid.group(1) if sid else os.path.basename(f)] = n
+    check(not crowded,
+          f"{sum(v - 1 for v in crowded.values())} '{_chap}' heading(s) share a story "
+          f"with another, so they get no tab and no section (one story per chapter): "
+          + ", ".join(f"{k} holds {v}" for k, v in list(crowded.items())[:4])
+          + (" ..." if len(crowded) > 4 else ""))
+
 # ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
 n_pd = sum(1 for ch in dm if local(ch.tag) == "HyperlinkPageDestination")

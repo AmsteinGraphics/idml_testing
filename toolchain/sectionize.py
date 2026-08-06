@@ -150,7 +150,58 @@ def detect_chapters(build, chapter_style=None):
                              heading=head_text, page=page,
                              page_order=page_index[page["self"]]))
     chapters.sort(key=lambda c: c["page_order"])
+
     return chapters, ordered_pages
+
+
+def warn_crowded_stories(build, chapter_style):
+    """Report chapter headings that share a story. Called from the CLI only —
+    four tools call detect_chapters, and the warning should be said once."""
+    extra = count_extra_headings(build, chapter_style)
+    if not extra:
+        return
+    lost = sum(extra.values())
+    print(f"  WARNING: {lost} chapter heading(s) share a story with another and will "
+          f"NOT get their own tab or section.", file=sys.stderr)
+    for sid, n in list(extra.items())[:5]:
+        print(f"           story {sid} holds {n + 1} '{chapter_style}' headings",
+              file=sys.stderr)
+    print(f"           the model is one story per section — split them in InDesign, "
+          f"or lower tab_level.", file=sys.stderr)
+
+
+def paragraphs_in(psr):
+    """The paragraphs inside a ParagraphStyleRange — it can hold several, split by <Br/>."""
+    cur, out = [], []
+    for e in psr.iter():
+        tag = local(e.tag)
+        if tag == "Content":
+            cur.append(e.text or "")
+        elif tag == "Br":
+            out.append("".join(cur).strip())
+            cur = []
+    out.append("".join(cur).strip())
+    return [o for o in out if o]
+
+
+def count_extra_headings(build, chapter_style):
+    """{story: how many chapter headings BEYOND the first} for stories holding several."""
+    enc = chapter_style.replace(":", "%3a")
+    extra = {}
+    for p in glob.glob(os.path.join(build, "Stories", "*.xml")):
+        raw = open(p, encoding="utf-8").read()
+        if enc not in raw:
+            continue
+        n = 0
+        for psr in ET.fromstring(raw).iter():
+            if local(psr.tag) != "ParagraphStyleRange":
+                continue
+            if psr.get("AppliedParagraphStyle", "").endswith(enc):
+                n += len(paragraphs_in(psr))
+        if n > 1:
+            sid = re.search(r'<Story\b[^>]*Self="([^"]+)"', raw)
+            extra[sid.group(1) if sid else os.path.basename(p)] = n - 1
+    return extra
 
 
 def split_heading(text):
@@ -242,6 +293,7 @@ def main():
     args = ap.parse_args()
 
     chapters, ordered_pages = detect_chapters(args.build, args.chapter_style)
+    warn_crowded_stories(args.build, args.chapter_style or chapter_style_for(args.build))
     if not chapters:
         raise SystemExit(f"no chapters found (style {args.chapter_style})")
     secs = compute_sections(chapters, ordered_pages)
