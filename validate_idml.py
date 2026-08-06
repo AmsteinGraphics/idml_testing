@@ -88,9 +88,19 @@ for ch in dm:
 check(dm_story_refs == story_ids,
       f"story mismatch: on-disk-not-declared={sorted(story_ids-dm_story_refs)[:5]} "
       f"declared-not-on-disk={sorted(dm_story_refs-story_ids)[:5]}")
+# StoryList also names stories that don't live in Stories/: the XML BackingStory
+# (XML/BackingStory.xml) holds the XML root element and is declared via
+# idPkg:BackingStory, not idPkg:Story. Counting only Stories/*.xml reports it as
+# dangling -- v1.76 itself trips that (ub0), as does the kit (u98).
+other_story_ids = set()
+for ch in dm:
+    if ch.tag == f"{{{PKG}}}BackingStory":
+        p = os.path.join(D, ch.get("src"))
+        if os.path.exists(p):
+            other_story_ids |= set(re.findall(r'<XmlStory\b[^>]*\bSelf="([^"]+)"', reads(p)))
 sl = set(dm.get("StoryList", "").split())
-check(sl <= story_ids,
-      f"StoryList names missing stories: {sorted(sl-story_ids)[:5]}")
+check(sl <= (story_ids | other_story_ids),
+      f"StoryList names missing stories: {sorted(sl - story_ids - other_story_ids)[:5]}")
 
 # ---- 5. ParentStory refs resolve ------------------------------------------
 bad_parent = set()

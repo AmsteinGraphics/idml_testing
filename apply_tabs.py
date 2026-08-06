@@ -9,9 +9,12 @@ B-Base so no inherited strip shows, mirrored on both pages, digit = K
 
     apply_tabs.py <build_dir> [--dry-run]
 
-Geometry & swatch conventions come from the kit's BaseTabs (native mixed-ink
-tabs, tab_00 pure 292 .. tab_25 pure Black) — nothing is re-tweened here; the
-uniform N=26 grid is reused as-is. Chapter detection is shared with sectionize.
+Geometry & swatch conventions come from the kit's BaseTabs, and the tab grid is
+READ from that strip rather than assumed — N, pitch and the number origin all come
+from the kit, so this works at any chapter count. Nothing is re-tweened here;
+configure_chapters.py is what rebuilds the strip for a given N, and this refuses a
+kit whose strip doesn't match the chapters detected. Chapter detection is shared
+with sectionize.
 """
 import argparse
 import glob
@@ -21,13 +24,52 @@ import sys
 
 import sectionize as S
 
-PITCH = 20.7233
-PAGE_H, M_TOP = 595.275590551, 22.170070866
+PAGE_H, M_TOP, M_BOT = 595.275590551, 22.170070866, 55.842519685
 Y0 = M_TOP - PAGE_H / 2          # margin-box top (rect grid origin)
-TY0_NUM = -264.69               # number-frame grid origin
+BOX_H = PAGE_H - M_TOP - M_BOT
+
+# The grid is READ FROM THE KIT, never assumed. The chapter count belongs to the
+# manual being made -- 26 (v1.76) and 18 (make_18ch.py) were just instances --
+# and configure_chapters.py rebuilds the strip for whatever N the content has.
+# These are defaults only, replaced by set_grid() before anything uses them.
+NSLOTS, PITCH, TY0_NUM = 26, BOX_H / 26, -264.692
 RSLOT = lambda ytop: round((ytop - Y0) / PITCH)
 NSLOT = lambda ty: round((ty - TY0_NUM) / PITCH)
-TABFILL = r'FillColor="(?:MixedInk/tab_\d+|Color/PANTONE 292 U|Color/Black)"'
+TABFILL = r'FillColor="(?:MixedInk/tab_\d+|Color/PANTONE [^"]+|Color/Black)"'
+
+
+def read_grid(basetabs_xml):
+    """(N, pitch, number-origin) inferred from BT-BaseTabs' own strip."""
+    per_side = {"L": 0, "R": 0}
+    for m in re.finditer(r'<Rectangle\b[^>]*>.*?</Rectangle>', basetabs_xml, re.S):
+        if not re.search(TABFILL, m.group(0)):
+            continue
+        it = list(map(float, re.search(r'ItemTransform="([^"]+)"', m.group(0)).group(1).split()))
+        xs = [float(p.split()[0]) * it[0] + it[4]
+              for p in re.findall(r'Anchor="([^"]+)"', m.group(0))]
+        per_side["R" if sum(xs) / len(xs) > 0 else "L"] += 1
+    n = max(per_side.values()) or 26
+    # Pitch is MEASURED, not derived from the box: v1.76's 26-slot strip inherits
+    # the .ai artwork's 20.7233 (26 x 20.7233 = 538.8, which overflows the 517.26pt
+    # margin box), whereas a strip from configure_chapters.py tiles the box exactly.
+    # The median of consecutive gaps ignores the one off-strip stray.
+    tys = {"L": [], "R": []}
+    for m in re.finditer(r'<TextFrame\b[^>]*>', basetabs_xml):
+        it = re.search(r'ItemTransform="([^"]+)"', m.group(0))
+        if not it or 'ParentStory="' not in m.group(0):
+            continue
+        v = list(map(float, it.group(1).split()))
+        if abs(v[4]) >= 300:
+            tys["R" if v[4] > 0 else "L"].append(v[5])
+    col = sorted(max(tys.values(), key=len))
+    gaps = sorted(b - a for a, b in zip(col, col[1:]))
+    pitch = gaps[len(gaps) // 2] if gaps else BOX_H / n
+    return n, pitch, (min(col) if col else TY0_NUM)
+
+
+def set_grid(grid):
+    global NSLOTS, PITCH, TY0_NUM
+    NSLOTS, PITCH, TY0_NUM = grid
 
 
 def local(t):
@@ -75,19 +117,22 @@ def numframe_slot(tag):
     if abs(tx) < 300:          # tab numbers sit in the outer margin
         return False, None
     s = NSLOT(ty)
-    return True, (s if 0 <= s <= 25 else None)
+    return True, (s if 0 <= s < NSLOTS else None)
 
 
 def repair_strip(xml):
     """Move any off-strip tab-number frame back to its slot. Returns (xml, log).
 
-    BT-BaseTabs should carry 26 slots x 2 pages = 52 number frames. v1.76 ships
-    with one of them -- slot 25's right-page number, u25f77 -- parked exactly one
-    strip height (26 x 20.7233 = 538.80pt) below its home at ty=253.39, and every
-    file derived from the manual inherited it. A frame's x tells us which side it
-    belongs to; the single gap in the 52-slot grid tells us which slot. Without
-    this, chapter 26 would come out with a left-page number only.
+    BT-BaseTabs should carry N slots x 2 pages of number frames, N being whatever
+    the strip itself says. v1.76 ships its 26-slot strip one frame short: slot 25's
+    right-page number, u25f77, parked exactly one strip height (26 x 20.7233 =
+    538.80pt) below its home at ty=253.39, and every file derived from the manual
+    inherited it. A frame's x tells us which side it belongs to; the single gap in
+    the grid tells us which slot. Without this the last chapter would come out with
+    a left-page number only. A strip rebuilt by configure_chapters.py never has
+    this problem -- it is generated whole.
     """
+    set_grid(read_grid(xml))          # the strip defines its own grid
     frames = []
     for m in re.finditer(r'<TextFrame\b[^>]*>', xml):
         tag = m.group(0)
@@ -102,13 +147,13 @@ def repair_strip(xml):
                            tx=tx, ty=ty, slot=NSLOT(ty)))
 
     present = {(f["slot"], "R" if f["tx"] > 0 else "L")
-               for f in frames if 0 <= f["slot"] <= 25}
-    missing = [(s, side) for s in range(26) for side in ("L", "R")
+               for f in frames if 0 <= f["slot"] < NSLOTS}
+    missing = [(s, side) for s in range(NSLOTS) for side in ("L", "R")
                if (s, side) not in present]
 
     splices, log = [], []
     for f in frames:
-        if 0 <= f["slot"] <= 25:
+        if 0 <= f["slot"] < NSLOTS:
             continue
         side = "R" if f["tx"] > 0 else "L"
         gaps = [g for g in missing if g[1] == side]
@@ -245,6 +290,12 @@ def main():
         raise SystemExit("BT-BaseTabs' tab strip is incomplete:\n  "
                          + "\n  ".join(strip_log)
                          + f"\nRepair the kit first:  python3 fix_tab_strip.py {build}")
+    # the strip must have exactly one slot per chapter -- the count belongs to the
+    # manual, so a mismatch means the strip was built for a different document
+    if len(chapters) != NSLOTS:
+        raise SystemExit(
+            f"tab strip has {NSLOTS} slots but {len(chapters)} chapters were detected.\n"
+            f"Rebuild the strip for this manual:  python3 configure_chapters.py {build}")
 
     # mint lowercase-hex ids that don't collide with anything already in the tree
     existing = set()

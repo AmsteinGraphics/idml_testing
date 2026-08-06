@@ -27,7 +27,8 @@ Everything is plain `python3` with the standard library only. No InDesign and no
 | `dm32_print_manual_v1.76_fixed.idml` | same, with 2 broken oblique links repaired (dest keys 208, 119) |
 | `manual_template.idml` | canonical blank-kit template, 26 chapters — tabs still use the external `.ai` |
 | `manual_template_masters_proof.idml` | 26-ch, native mixed-ink tabs, `.ai` dependency removed |
-| `manual_template_tab18_proof.idml` | 18-ch parametric build, numbered tabs on both pages (latest) |
+| `manual_template_tab18_proof.idml` | 18-ch build, numbered tabs on both pages |
+| **`manual_template_nosection.idml`** | **the kit the forward pipeline runs on** — 7 masters, native tabs, no chapter masters |
 | `manual_template_example_mixed_ink.idml` | InDesign-authored mixed-ink swatch sample (schema reference) |
 | `*.py` | the toolchain, see below |
 | `template_build.swatches`, `template_build.tabstops.csv` | per-project config (see *Conventions*) |
@@ -67,6 +68,7 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 |---|---|---|
 | `fix_numbering.py` | join `titles:lvl2`/`lvl3` to the `dm32_list` numbered list so multi-level section numbering counts up | `fix_numbering.py <dir>` |
 | `sectionize.py` | detect chapters (`titles:lvl2` headings), locate each one's first page geometrically, write one `<Section>` per chapter | `sectionize.py <dir> [--dry-run]` |
+| `configure_chapters.py` | rebuild the thumb-tab strip for N chapters — **any N**, defaulting to the number detected in the document | `configure_chapters.py <dir> [--n N]` |
 | `apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
 | `build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
 | `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
@@ -111,10 +113,10 @@ destination anchors, but no margin boxes, no sections, no tabs, and usually only
 ```bash
 python3 -c "import zipfile; zipfile.ZipFile('submission.idml').extractall('build')"
 
-python3 fix_numbering.py  build      # lvl2/lvl3 -> dm32_list, so numbering counts up
-python3 sectionize.py     build      # one <Section> per titles:lvl2 chapter
-python3 fix_tab_strip.py  build      # once per kit; no-op afterwards
-python3 apply_tabs.py     build      # S<k> master per chapter, applied to its pages
+python3 fix_numbering.py      build  # lvl2/lvl3 -> dm32_list, so numbering counts up
+python3 sectionize.py         build  # one <Section> per titles:lvl2 chapter
+python3 configure_chapters.py build  # rebuild the tab strip for THIS manual's N
+python3 apply_tabs.py         build  # S<k> master per chapter, applied to its pages
 python3 build_xref_boxes.py build --jsx   # suppress + log dead links, defer the boxes
 python3 validate_idml.py  build
 python3 repack.py         build out.idml
@@ -128,8 +130,12 @@ python3 repack.py         build2 final.idml
 ```
 
 Order matters: `fix_numbering` must run before `sectionize` (section markers come from
-the numbered headings), and `apply_tabs` needs the sections in place. `fix_tab_strip`
-must precede `apply_tabs`, which refuses a kit whose strip is incomplete.
+the numbered headings), `configure_chapters` needs the chapters detected, and
+`apply_tabs` needs both the sections and a strip with one slot per chapter — it refuses a
+strip that is incomplete or the wrong size, naming the tool to run. `configure_chapters`
+supersedes `fix_tab_strip` on this path: it regenerates the strip whole, so an inherited
+off-strip frame simply ceases to exist. `fix_tab_strip` remains for repairing a legacy
+26-slot kit you want to keep as-is.
 
 Things learned the hard way:
 
@@ -239,6 +245,32 @@ there is a judgment call (drop the override and the word becomes underlined, or 
 style and it becomes plain). Empty ranges and `Underline*` geometry with no toggle are
 inert and stripped by default.
 
+## The chapter count is the manual's, not the toolchain's
+
+26 (v1.76) and 18 (`make_18ch.py`) were instances, never the rule — the next manual has
+whatever chapter count its content has. `configure_chapters.py` makes that the operating
+assumption: it defaults N to the chapters actually detected in the document and rebuilds
+the strip for it, and `apply_tabs.py` **reads** N, pitch and the number origin from the
+strip rather than assuming them.
+
+The strip is *generated* from templates, not pruned from a fixed grid — `make_18ch.py`
+could only shrink 26 down, never grow past it. One tab rectangle and one number frame per
+page act as templates; N of each are emitted at `pitch = box_height / N`, each number
+frame gets its own story carrying digit 1…N, and the ink ramp from
+`<build>.tabstops.csv` is re-tweened across the new N (a stop landing on a single ink is
+emitted as a plain `Color/` + `FillTint`, which is what makes an unmixed spot print
+solid). Verified at N = 1, 2, 5, 12, 26, 34, 47: exact tiling — first tab top at `Y0`,
+last tab bottom at `Y0 + box_height`, zero-width seams.
+
+A side effect worth knowing: a *generated* 26-slot strip uses pitch 19.8947 and tiles the
+margin box exactly, where the inherited one uses 20.7233 from the `.ai` artwork —
+26 × 20.7233 = 538.8 pt against a 517.26 pt box, so the original strip always overflowed.
+That is why `read_grid()` **measures** the pitch (median gap between consecutive number
+frames) instead of computing `box_height / N`.
+
+Physical limits are a design decision, not enforced: ~26 tabs fit comfortably, ~40 forces
+tabs under 14 pt, and past that you want grouped or two-level tabs.
+
 ## The tab strip
 
 The numbered thumb-tab index down the outer page edge is the only part of the design
@@ -312,11 +344,12 @@ Collected the hard way; all of these will silently produce a file InDesign rejec
 ## Status
 
 Done: broken-link repair · blank-kit template (opens in InDesign) · metadata scrub ·
-swatch prune · style analysis · native mixed-ink tabs at N=26 with the `.ai` fully
-removed · 18-chapter parametric build with numbered tabs on both pages · forward content
-pipeline (sections, tabs, oblique-ref boxes via JSX) · tab strip repaired to 52/52 across
-all templates · style-driven underline enforcement · **InDesign 2026 crash fixed and
-confirmed** (duplicate master identity + frames sharing a story).
+swatch prune · style analysis · native mixed-ink tabs with the `.ai` fully removed ·
+forward content pipeline (sections, tabs, oblique-ref boxes via JSX) · tab strip repaired
+to 52/52 across all templates · style-driven underline enforcement · **InDesign 2026 crash
+fixed and confirmed** (duplicate master identity + frames sharing a story) · **chapter
+count fully parametric** — the strip is generated for whatever N the content has, and the
+grid is read from the kit rather than assumed.
 
 Open:
 
@@ -324,10 +357,8 @@ Open:
   references the `.ai`.
 - The mirrored right-page tab number reuses the right-aligned `foot_and_tabs:tab_right`
   style; a left-aligned variant may look better.
-- Generalise `make_18ch.py` (a hardcoded N=18 instance) into a real
-  `configure_chapters.py` driven by a chapter-title manifest.
-- `apply_tabs.py` reuses the kit's uniform N=26 tab grid as-is. A manual with a different
-  chapter count needs the strip re-tweened (that's what `make_18ch.py` does for N=18).
-- The kit's `StoryList` names a story `u98` that doesn't exist. Harmless — it predates
-  the forward pipeline and InDesign opens it fine — but `validate_idml.py` reports it on
-  every run.
+- `make_18ch.py` is now redundant with `configure_chapters.py` for the strip, but still
+  does the chapter-master pruning and re-basing a 26-chapter *template* needs. Worth
+  folding together.
+- `configure_chapters.py` rebuilds the strip but doesn't rename anything from a
+  chapter-title manifest; titles still come from the detected `titles:lvl2` headings.
