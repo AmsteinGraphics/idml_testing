@@ -212,8 +212,8 @@ cross-checked and are **not** defects — see `missing_underline_verified.csv`.
 
 ## The heading hierarchy
 
-Four levels, top-down: `titles:lvl1` … `titles:lvl4`, numbering `1`, `1.2`, `1.2.3`,
-`1.2.3.4`. The style chain runs the other way — `lvl4` is the base style and carries the
+Four levels, top-down: `titles:lvl1` … `titles:lvl4`. By default `lvl1` is an unnumbered
+label and the rest number `1`, `1.2`, `1.2.3`. The style chain runs the other way — `lvl4` is the base style and carries the
 `manual_list` numbering list, with `lvl3`, `lvl2`, `lvl1` chained onto it, each overriding
 size and spacing. `titles:lvl1` is currently a stylistic copy of `lvl2` (BasedOn it with
 no overrides of its own), so it looks identical and will follow if `lvl2` is restyled;
@@ -246,11 +246,12 @@ That second point matters because a document carries its own copy of the styles.
 submission poured before `lvl1` existed still has `titles:lvl2` at level 1 and numbers
 `1.4.4`; one poured from the current kit has it at level 2. Both are computed correctly.
 
-> **Adding a level is not backwards compatible for content.** Existing content re-poured
-> into the current kit gains a place and a leading zero — a former `1.4.4` becomes
-> `0.1.4.4` — because level 1's counter never advances without a `titles:lvl1` heading.
-> Content written against the old hierarchy needs headings at the new top level. The
-> already-exported submissions are unaffected: they keep their own three-level styles.
+**The kit's default is `number_from = 2`:** `titles:lvl1` is an unnumbered Part label,
+and `lvl2`/`lvl3`/`lvl4` are numbering levels 1/2/3 — the same depths the DM32 manual
+always used. So content written against the pre-`lvl1` hierarchy still numbers `1.4.4`
+when re-poured, and a manual that adds Parts gets them as labels without disturbing the
+section numbering underneath. A manual that genuinely wants its top level numbered sets
+`number_from = 1`.
 
 `restyle_heading_levels.py` performs the change and is re-runnable for a fifth level.
 

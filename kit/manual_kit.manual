@@ -16,7 +16,7 @@ swatch = PANTONE Warm Gray 1 U
 # Optional. It does NOT fix numbering -- content starting at lvl1 already numbers
 # correctly. It lets validate_idml.py catch content that SKIPS the top level
 # (the cause of a leading zero, "0.1.4") or reaches deeper than declared.
-# levels = 4
+levels = 4
 
 # Which heading level carries a thumb tab and an InDesign section. Optional;
 # without it the shallowest level present is used. Declare it when that is not
@@ -31,3 +31,4 @@ tab_stop = PANTONE 292 U
 tab_stop = PANTONE Warm Gray 1 U
 tab_stop = PANTONE 130 U
 tab_stop = Black
+number_from = 2
