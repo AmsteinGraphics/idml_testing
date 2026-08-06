@@ -293,6 +293,27 @@ if _conf["levels"]:
               f"content, so there would be no tabs (levels present: "
               f"{sorted(used) or 'none'})")
 
+# ---- 10d. master identity must be unique -----------------------------------
+# A master is identified by NamePrefix + BaseName, not by Name. Two masters
+# claiming the same identity is what crashed InDesign 2026 on open, and it is
+# what re-running the pipeline over its own output produces: apply_tabs.py mints
+# a second S1..SN set beside the first. Cheap to check, fatal to miss.
+ident = {}
+for f in masters:
+    m = re.search(r'<MasterSpread\b[^>]*>', reads(f))
+    if not m:
+        continue
+    pre = re.search(r'\bNamePrefix="([^"]*)"', m.group(0))
+    base = re.search(r'\bBaseName="([^"]*)"', m.group(0))
+    if pre and base:
+        ident.setdefault((pre.group(1), base.group(1)), []).append(os.path.basename(f))
+dup_ident = {k: v for k, v in ident.items() if len(v) > 1}
+check(not dup_ident,
+      f"{len(dup_ident)} duplicate master identit(ies) — InDesign identifies a master "
+      f"by NamePrefix+BaseName: "
+      + ", ".join(f"{p}-{b} x{len(v)}" for (p, b), v in list(dup_ident.items())[:4])
+      + (" ..." if len(dup_ident) > 4 else ""))
+
 # ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
 n_pd = sum(1 for ch in dm if local(ch.tag) == "HyperlinkPageDestination")

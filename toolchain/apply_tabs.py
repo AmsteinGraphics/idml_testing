@@ -279,6 +279,38 @@ def main():
     chapters, ordered_pages = S.detect_chapters(build)   # topmost level present
     if not chapters:
         raise SystemExit("no chapters found")
+
+    # Chapter masters are REPLACED, not added to. Running the pipeline over its own
+    # output otherwise mints a second S1..SN set beside the first, and two masters
+    # sharing NamePrefix+BaseName is the duplicate identity that crashes InDesign
+    # 2026. Purge any previous set before minting this one, so a re-run converges.
+    purged, purged_stories = [], set()
+    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
+        t = open(f, encoding="utf-8").read()
+        m = re.search(r'<MasterSpread\b[^>]*\bNamePrefix="S\d+"', t)
+        if not m:
+            continue
+        purged.append(re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1))
+        purged_stories |= set(re.findall(r'ParentStory="([^"]+)"', t))
+        os.remove(f)
+    if purged and not args.dry_run:
+        for sid in purged_stories:
+            p = os.path.join(build, "Stories", f"Story_{sid}.xml")
+            if os.path.exists(p):
+                os.remove(p)
+        dmp = os.path.join(build, "designmap.xml")
+        d = open(dmp, encoding="utf-8").read()
+        for dead in purged:
+            d = re.sub(r'[ \t]*<idPkg:MasterSpread\b[^>]*MasterSpread_%s\.xml"[^>]*/>\s*\n?'
+                       % re.escape(dead), "", d)
+        for sid in purged_stories:
+            d = re.sub(r'[ \t]*<idPkg:Story\b[^>]*Story_%s\.xml"[^>]*/>\s*\n?'
+                       % re.escape(sid), "", d)
+        keep = [s for s in re.search(r'StoryList="([^"]*)"', d).group(1).split()
+                if s not in purged_stories]
+        d = re.sub(r'StoryList="[^"]*"', 'StoryList="' + " ".join(keep) + '"', d, count=1)
+        open(dmp, "w", encoding="utf-8").write(d)
+        print(f"  purged {len(purged)} chapter master(s) from a previous run")
     secs = S.compute_sections(chapters, ordered_pages)
     base_self = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"',
                           master_by_name(build, "B-Base")[1]).group(1)
