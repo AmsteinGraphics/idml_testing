@@ -29,15 +29,14 @@ kit/
   manual_kit.idml           the house blank: styles, masters, colours, tags,
                             cross-reference + index engines. 7 masters, native
                             mixed-ink tabs, no chapter masters, no content.
-  manual_kit.swatches       default palette
-  manual_kit.tabstops.csv   default tab-strip ink ramp
+  manual_kit.manual         default config: palette, hierarchy, tab ink ramp
   reference/                InDesign-authored samples kept for their schema
   derivation/               how the kit was cut from the DM32 manual (provenance)
 manuals/
   dm32/
     dm32_print_manual_v1.76.idml       the shipped manual (source of truth)
     dm32_print_manual_v1.76_fixed.idml same, 2 broken oblique links repaired
-    dm32.swatches  dm32.tabstops.csv   this manual's config
+    dm32.manual                        this manual's config
     submissions/                       content poured into the kit, from InDesign
     audit/                             cross-reference audit output
     build/                             working tree (not tracked)
@@ -112,7 +111,7 @@ python3 toolchain/bake_masters.py template_build template_build_masters    # nat
 python3 toolchain/repack.py template_build_masters manual_template_masters_proof.idml
 
 python3 toolchain/configure_chapters.py template_build_18 --n 18 \
-        --tabstops template_build.tabstops.csv                   # any N, masters reconciled
+        --config manuals/dm32/dm32.manual                        # any N, masters reconciled
 
 python3 toolchain/validate_idml.py template_build_masters                  # validate any build dir
 ```
@@ -255,8 +254,8 @@ two config files:
 
 ```bash
 mkdir -p manuals/dm42n/submissions
-cp kit/manual_kit.swatches      manuals/dm42n/dm42n.swatches       # edit if the palette differs
-cp kit/manual_kit.tabstops.csv  manuals/dm42n/dm42n.tabstops.csv   # edit if the ramp differs
+cp kit/manual_kit.manual manuals/dm42n/dm42n.manual   # then edit: palette, levels,
+                                                      # tab_level, tab ink ramp
 ```
 
 Pour content into `kit/manual_kit.idml` in InDesign, export IDML to
@@ -265,9 +264,9 @@ Pour content into `kit/manual_kit.idml` in InDesign, export IDML to
 nothing needs to be passed on the command line.
 
 The chapter count is **not** configuration — `configure_chapters.py` takes it from the
-content. Neither is the palette hardcoded: the `tabstops.csv` header names the inks and
-they are resolved against the document's own `Graphic.xml`, so a manual using different
-spots only needs a different header. What is *not* yet parametric is page geometry —
+content. Neither is the palette hardcoded: `tab_stop` lines name their inks and they are
+resolved against the document's own `Graphic.xml`, so a manual using different spots
+only needs different stops. What is *not* yet parametric is page geometry —
 `PAGE_H` / `M_TOP` / `M_BOT` are constants, fine while every manual is this A5 trim.
 
 **Migrating an existing document** built before standardisation: run
@@ -282,7 +281,7 @@ never gets packed into the `.idml`):
 Discovery walks outward, most specific first: `<build>.manual`, then any `*.manual` in
 the build's parent (`manuals/<product>/<product>.manual`), then the kit's default. So a
 manual directory carries its own config and nothing needs passing on the command line;
-`--swatches` / `--tabstops` still override.
+`--swatches` / `--config` still override.
 
 - **`<product>.manual`** — `key = value`, `#` comments, `swatch` may repeat:
 
@@ -296,12 +295,12 @@ manual directory carries its own config and nothing needs passing on the command
   `validate_idml.py` flags any applied colour not listed (a mixed ink built only from
   listed inks counts as listed); `prune_swatches.py` keeps listed swatches even when
   unused. Both `levels` and `tab_level` are optional — see *The heading hierarchy*.
-- **`<product>.tabstops.csv`** — the header **names the inks** and is resolved against
-  the document's own `Graphic.xml`; a column may name an ink in full (`PANTONE 292 U`)
-  or short (`292`, `Black`). Each row is a gradient stop giving each ink's percentage.
-  Stops are evenly spaced along the strip and the N tabs are tweened between them, with
-  a mixed ink's components ordered by the document's `TrapOrder`. DM32 uses four pure
-  stops: 292 → Warm Gray 1 → 130 → Black.
+  `tab_stop` lines are the tab-strip ink ramp, top of the strip to the bottom. A bare
+  ink name is that ink at 100%; a mix is `PANTONE 292 U 60%, Black 40%`. Inks are
+  resolved against the document's own `Graphic.xml` and may be named in full
+  (`PANTONE 292 U`) or short (`292`, `Black`). Stops are evenly spaced along the strip
+  and the N tabs tween between them, with a mixed ink's components ordered by the
+  document's `TrapOrder`. DM32 uses four pure stops: 292 → Warm Gray 1 → 130 → Black.
 
 ## Underlines are style-driven, always
 
@@ -372,7 +371,7 @@ The strip is *generated* from templates, not pruned from a fixed grid — the ol
 the retired `make_18ch.py` could only shrink 26 down, never grow past it. One tab rectangle and one number frame per
 page act as templates; N of each are emitted at `pitch = box_height / N`, each number
 frame gets its own story carrying digit 1…N, and the ink ramp from
-`<build>.tabstops.csv` is re-tweened across the new N (a stop landing on a single ink is
+the configured `tab_stop` ramp is re-tweened across the new N (a stop landing on a single ink is
 emitted as a plain `Color/` + `FillTint`, which is what makes an unmixed spot print
 solid). Verified at N = 1, 2, 5, 12, 26, 34, 47: exact tiling — first tab top at `Y0`,
 last tab bottom at `Y0 + box_height`, zero-width seams.

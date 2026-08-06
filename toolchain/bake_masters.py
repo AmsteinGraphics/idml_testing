@@ -7,7 +7,7 @@ existing bleed is kept) and the whole BaseTabs->Sx override/filiation structure
 Per chapter master: find its single tab rectangle (the one holding the
 tab_gradient PDF/Link), delete the PDF+Link, and fill the rectangle with the
 mixed-ink for that chapter's tab index (index derived from the number frame's
-vertical position). Colours come from <src>.tabstops.csv, tweened over N=26.
+vertical position). Colours come from the manual's .manual config, tweened over N=26.
 
 Usage: python3 bake_masters.py [src_dir] [out_dir]
 """
@@ -30,9 +30,18 @@ COLOR_NAME={"Black":"Black","Warm Gray 1":"PANTONE Warm Gray 1 U",
             "130":"PANTONE 130 U","292":"PANTONE 292 U"}
 enc = lambda s: s.replace(" ", "%20")
 
-# ---- tween the stops -------------------------------------------------------
-with open(SRC + ".tabstops.csv") as fh:
-    stops = [[float(v) for v in r] for r in list(csv.reader(fh))[1:]]
+# ---- stops from the manual's .manual config (tabstops.csv is gone) ---------
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
+_conf = manualconf.load(SRC)
+if not _conf["tab_stops"]:
+    raise SystemExit(f"no tab_stop lines in {_conf['path'] or 'any .manual config'}")
+# KEYS is this file's fixed column order; map the named stops onto it
+stops = [[mix.get(k, mix.get({"Black": "Black", "292": "PANTONE 292 U",
+                              "130": "PANTONE 130 U",
+                              "Warm Gray 1": "PANTONE Warm Gray 1 U"}[k], 0.0))
+          for k in KEYS] for mix in _conf["tab_stops"]]
+
 def tween(p):
     S = len(stops) - 1; seg = min(int(p * S), S - 1)
     p0, p1 = seg / S, (seg + 1) / S

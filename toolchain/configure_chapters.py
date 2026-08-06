@@ -9,14 +9,14 @@ strip follows the content.
 The strip is GENERATED from templates rather than pruned from a fixed grid --
 make_18ch.py could only ever shrink 26 down, never grow past it. One existing tab
 rectangle and one number frame per page are taken as templates; N of each are
-emitted at pitch = margin_box_height / N, and the ink ramp from
-<build>.tabstops.csv is re-tweened across the new N.
+emitted at pitch = margin_box_height / N, and the ink ramp from the
+manual's .manual config is re-tweened across the new N.
 
 Rebuilt per run: N tab rectangles x 2 pages, N number frames x 2 pages (each with
 its own story, digit 1..N), and N tab swatches (mixed inks, plus pure Color/ for
 single-ink stops) registered in Graphic.xml and designmap.
 
-    configure_chapters.py <build_dir> [--n N] [--tabstops FILE] [--dry-run]
+    configure_chapters.py <build_dir> [--n N] [--config FILE] [--dry-run]
 
 Run AFTER sectionize.py (which is what detects the chapters) and BEFORE
 apply_tabs.py (which clones one slot per chapter off this strip). It supersedes
@@ -27,13 +27,13 @@ Physical limits, not enforced: ~26 tabs fit comfortably, ~40 forces tabs under
 14pt, and beyond that you want grouped or two-level tabs -- a design decision.
 """
 import argparse
-import csv
 import glob
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
 import sectionize as S
 
 PAGE_H, M_TOP, M_BOT = 595.275590551, 22.170070866, 55.842519685
@@ -47,14 +47,12 @@ enc = lambda s: s.replace(" ", "%20")
 
 
 def resolve_palette(build, keys):
-    """Bind the tabstops CSV's column names to THIS document's inks and colours.
+    """Bind the configured stop ink names to THIS document's inks and colours.
 
-    The ink identities used to be hardcoded to the DM32 palette while the CSV
-    header naming them was ignored, so a manual with different spots silently got
-    DM32's inks. They are now resolved against Resources/Graphic.xml, and ordered
-    by the document's own TrapOrder -- which is what InDesign lists a mixed ink's
-    components by. A column may name an ink in full ("PANTONE 292 U") or in the
-    short form the DM32 sheet uses ("292", "Black").
+    The ink identities used to be hardcoded to the DM32 palette. They are now
+    resolved against Resources/Graphic.xml and ordered by the document's own
+    TrapOrder -- which is what InDesign lists a mixed ink's components by. A stop
+    may name an ink in full ("PANTONE 292 U") or short ("292", "Black").
 
     Returns (trap_ordered_keys, {key: {ink_ref, ink_name, color_ref, color_name}}).
     """
@@ -71,7 +69,7 @@ def resolve_palette(build, keys):
     for k in keys:
         ink = next((c for c in (k, f"PANTONE {k} U", f"$ID/Process {k}") if c in inks), None)
         if ink is None:
-            raise SystemExit(f"tabstops column {k!r} names no ink in this document.\n"
+            raise SystemExit(f"tab_stop ink {k!r} is not an ink in this document.\n"
                              f"inks present: {sorted(inks)}")
         color = "Black" if ink == "$ID/Process Black" else ink
         if color not in colors:
@@ -88,39 +86,31 @@ def set_attr(tag, n, v):
     return tag[:-1] + f' {n}="{v}"' + tag[-1]
 
 
-def find_config(build, suffix, explicit=None):
-    """Yield candidate per-manual config paths, most specific first.
+# Below this the tab is too shallow to hold its number comfortably; the fix is a
+# design decision (grouped or two-level tabs), so this advises rather than fails.
+MIN_PITCH = 14.0
 
-    Per-manual config lives NEXT TO the build directory so it is never packed into
-    the .idml. With the repo split into toolchain / kit / manuals, a build dir is
-    manuals/<product>/build, so the config sits one level up as
-    manuals/<product>/<product><suffix> -- hence the parent-directory search. The
-    kit's own file is the last resort, which is what a brand-new manual starts from.
+
+def load_stops(build, explicit=None):
+    """(stops as numeric rows, ink names, config path).
+
+    Stops come from the manual's .manual config as `tab_stop` lines naming their
+    inks inline, replacing the old positional tabstops.csv.
     """
-    if explicit:
-        if not os.path.exists(explicit):
-            raise SystemExit(f"config not found: {explicit}")
-        yield explicit
-        return
-    b = build.rstrip("/")
-    parent = os.path.dirname(b) or "."
-    cands = [b + suffix] + sorted(glob.glob(os.path.join(parent, "*" + suffix)))
-    here = os.path.dirname(os.path.abspath(__file__))
-    cands.append(os.path.join(here, "..", "kit", "manual_kit" + suffix))
-    for p in cands:
-        if os.path.exists(p):
-            yield p
-
-
-def load_stops(build, explicit):
-    """(stops, column_names, path). The header names the inks; it is not decoration."""
-    for p in find_config(build, ".tabstops.csv", explicit):
-        lines = [ln for ln in open(p)
-                 if ln.strip() and not ln.lstrip().startswith("#")]   # allow comments
-        rows = list(csv.reader(lines))
-        keys = [c.strip() for c in rows[0]]
-        return [[float(v) for v in r] for r in rows[1:]], keys, p
-    raise SystemExit("no tabstops CSV found; pass --tabstops FILE")
+    conf = manualconf.load(build, explicit)
+    if not conf["tab_stops"]:
+        raise SystemExit(
+            f"no tab_stop lines in {conf['path'] or 'any .manual config'} — the tab "
+            f"strip needs at least one.\n"
+            f"e.g.  tab_stop = PANTONE 292 U\n"
+            f"      tab_stop = Black")
+    keys = []
+    for mix in conf["tab_stops"]:
+        for k in mix:
+            if k not in keys:
+                keys.append(k)
+    rows = [[mix.get(k, 0.0) for k in keys] for mix in conf["tab_stops"]]
+    return rows, keys, conf["path"]
 
 
 def tween(stops, keys, p):
@@ -177,7 +167,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
     ap.add_argument("--n", type=int, help="chapter count (default: detected)")
-    ap.add_argument("--tabstops")
+    ap.add_argument("--config", help="explicit <product>.manual path")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     build = args.build
@@ -191,7 +181,7 @@ def main():
     if n < 1:
         raise SystemExit("N must be >= 1")
 
-    stops, keys, stops_path = load_stops(build, args.tabstops)
+    stops, keys, stops_path = load_stops(build, args.config)
     trap, palette = resolve_palette(build, keys)
     fills, inks, cgs = build_swatches(stops, keys, trap, palette, n)
     pitch = BOX_H / n
@@ -423,6 +413,10 @@ def main():
                d, count=1)
     open(dp, "w", encoding="utf-8").write(d)
 
+    if pitch < MIN_PITCH:
+        print(f"NOTE: {n} tabs gives a {pitch:.2f}pt pitch, below the ~{MIN_PITCH:.0f}pt "
+              f"a tab needs to hold its number comfortably. Consider grouped or "
+              f"two-level tabs — a design decision this tool won't make.")
     print(f"N={n} pitch={pitch:.4f} | strip: {len(new_rects)} tab rects, "
           f"{len(new_frames)} numbered frames, {len(inks)} mixed inks + "
           f"{n - len(inks)} pure | stops: {os.path.basename(stops_path)}")

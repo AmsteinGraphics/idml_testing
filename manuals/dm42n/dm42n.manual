@@ -22,3 +22,12 @@ levels = 4
 # without it the shallowest level present is used. Declare it when that is not
 # what you want -- 5 lvl1 parts and 23 lvl2 sections means tabs on lvl2, not 5 tabs.
 tab_level = 2
+
+# Tab-strip ink ramp, top of the strip to the bottom. A bare ink name is that ink
+# at 100%; a mix is "PANTONE 292 U 60%, Black 40%". Percentages are per-ink and
+# independent. N tabs are tweened between these stops; a tab landing on a single
+# ink becomes a plain Color/ + FillTint so the spot prints solid.
+tab_stop = PANTONE 292 U
+tab_stop = PANTONE Warm Gray 1 U
+tab_stop = PANTONE 130 U
+tab_stop = Black

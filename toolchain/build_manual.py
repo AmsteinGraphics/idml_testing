@@ -3,8 +3,8 @@
 
     build_manual.py manuals/<product>/submissions/<file>.idml [--out DIR] [--keep]
 
-The manual directory is inferred from the path, so config (<product>.swatches,
-<product>.tabstops.csv) is found by the usual outward search and nothing else has
+The manual directory is inferred from the path, so config (palette, hierarchy,
+in <product>.manual) is found by the usual outward search and nothing else has
 to be passed.
 
 THE PIPELINE HAS A HARD BREAK and this script stops at it. Margin boxes cannot be

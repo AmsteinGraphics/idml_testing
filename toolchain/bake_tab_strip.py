@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bake a native mixed-ink tab strip into an IDML (replaces the placed .ai).
 
-Reads evenly-spaced ink-mix stops from <src>.tabstops.csv, tweens N tabs, emits
+Reads evenly-spaced ink-mix stops from the manual's .manual config, tweens N tabs, emits
 one mixed-ink swatch per tab (schema mirrored byte-for-byte from InDesign), and
 draws the tab rectangles tiling the margin box along the page edge. Non-current
 tabs are dimmed via FillTint; the current tab is full.
@@ -41,11 +41,19 @@ box_h = PAGE_H - M_TOP - M_BOT
 pitch = box_h / N
 Y0 = M_TOP - PAGE_H / 2                 # spread-space top of margin box (= -275.468)
 
-# ---- read + tween the stops ------------------------------------------------
-csv_path = SRC + ".tabstops.csv"
-with open(csv_path) as fh:
-    rows = list(csv.reader(fh))
-stops = [[float(v) for v in r] for r in rows[1:]]        # list of [K,292,130,WG]
+# ---- read + tween the stops; stops from the manual's .manual config (tabstops.csv is gone) ---------
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
+_conf = manualconf.load(SRC)
+if not _conf["tab_stops"]:
+    raise SystemExit(f"no tab_stop lines in {_conf['path'] or 'any .manual config'}")
+# KEYS is this file's fixed column order; map the named stops onto it
+stops = [[mix.get(k, mix.get({"Black": "Black", "292": "PANTONE 292 U",
+                              "130": "PANTONE 130 U",
+                              "Warm Gray 1": "PANTONE Warm Gray 1 U"}[k], 0.0))
+          for k in KEYS] for mix in _conf["tab_stops"]]
+
+csv_path = _conf['path']
 def tween(p):
     S = len(stops) - 1
     seg = min(int(p * S), S - 1)

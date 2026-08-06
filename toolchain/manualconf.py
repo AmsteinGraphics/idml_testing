@@ -16,7 +16,12 @@ build's parent (manuals/<product>/<product>.manual), then the kit's default.
     # Which heading level carries a thumb tab and an InDesign section.
     tab_level = 2
 
-`key = value`, `#` comments, blank lines ignored. `swatch` may repeat.
+    # Tab-strip ink ramp, top of the strip to the bottom. A bare ink name is that
+    # ink at 100%; mixes are "PANTONE 292 U 60%, Black 40%".
+    tab_stop = PANTONE 292 U
+    tab_stop = Black
+
+`key = value`, `#` comments, blank lines ignored. `swatch` and `tab_stop` repeat.
 
 WHY tab_level EXISTS: the tab level cannot be inferred. DM42n has 5 lvl1 parts and
 23 lvl2 sections, and the tabs belong on lvl2 — taking the topmost level would
@@ -33,6 +38,7 @@ comes from the document's own styles.
 """
 import glob
 import os
+import re
 
 KIT_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "kit", "manual_kit.manual")
@@ -45,9 +51,34 @@ def candidates(build, suffix=".manual"):
            [os.path.splitext(KIT_DEFAULT)[0] + suffix]
 
 
+def parse_stop(value, where):
+    """One tab-strip gradient stop: {ink name: percentage}.
+
+    `PANTONE 292 U` is that ink at 100%; `PANTONE 292 U 60%, Black 40%` is a mix.
+    Naming the inks inline replaces the old tabstops.csv, where percentages were
+    positional under a header row and silently wrong if the columns were reordered.
+    Percentages are per-ink and independent — they need not sum to 100.
+    """
+    mix = {}
+    for term in value.split(","):
+        term = term.strip()
+        if not term:
+            continue
+        m = re.match(r'^(.*?)\s+(\d+(?:\.\d+)?)\s*%$', term)
+        name, pct = (m.group(1).strip(), float(m.group(2))) if m else (term, 100.0)
+        if not name:
+            raise SystemExit(f"{where}: tab_stop term {term!r} has no ink name")
+        if not 0 <= pct <= 100:
+            raise SystemExit(f"{where}: {name} at {pct}% is outside 0..100")
+        mix[name] = mix.get(name, 0.0) + pct
+    if not mix:
+        raise SystemExit(f"{where}: empty tab_stop")
+    return mix
+
+
 def load(build, explicit=None):
-    """{swatches, levels, tab_level, chapter_style, heading_styles, path}."""
-    conf = dict(swatches=[], levels=None, tab_level=None, path=None)
+    """{swatches, levels, tab_level, tab_stops, chapter_style, heading_styles, path}."""
+    conf = dict(swatches=[], levels=None, tab_level=None, tab_stops=[], path=None)
 
     path = explicit
     if path and not os.path.exists(path):
@@ -66,13 +97,15 @@ def load(build, explicit=None):
             k, v = (s.strip() for s in line.split("=", 1))
             if k == "swatch":
                 conf["swatches"].append(v)
+            elif k == "tab_stop":
+                conf["tab_stops"].append(parse_stop(v, f"{path}:{n}"))
             elif k in ("levels", "tab_level"):
                 if not v.isdigit():
                     raise SystemExit(f"{path}:{n}: {k} must be a number, got {v!r}")
                 conf[k] = int(v)
             else:
                 raise SystemExit(f"{path}:{n}: unknown key {k!r} "
-                                 f"(expected swatch, levels, tab_level)")
+                                 f"(expected swatch, tab_stop, levels, tab_level)")
     else:
         # a pre-consolidation manual may still carry the palette on its own
         legacy = next((p for p in candidates(build, ".swatches") if os.path.exists(p)), None)
