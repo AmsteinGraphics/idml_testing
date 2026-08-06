@@ -324,8 +324,12 @@ def main():
             build, basetabs_xml, k, slot, c["title"], base_self, mint)
         plan.append(dict(k=k, slot=slot, title=c["title"], fname=fname, mxml=mxml,
                          stories=stories, page_selfs=page_selfs, master_self=master_self))
-        fill = {0: "pure 292", 25: "pure Black"}.get(slot, f"tab_{slot:02d}")
-        print(f"  S{k}-{c['title'][:40]:40} slot{slot} fill={fill:10} "
+        # report the fill this master actually got. It used to be looked up in
+        # {0: "pure 292", 25: "pure Black"} -- the DM32 ramp hardcoded -- which
+        # mislabelled every other manual: DM42n's slot 0 is pure PANTONE 130 U.
+        got = re.search(TABFILL, mxml)
+        fill = re.search(r'"([^"]+)"', got.group(0)).group(1).split("/", 1)[-1] if got else "?"
+        print(f"  S{k}-{c['title'][:40]:40} slot{slot} fill={fill:22} "
               f"digit={k} pages={page_selfs[0]}..+{len(page_selfs)-1}")
 
     if args.dry_run:

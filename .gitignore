@@ -1,3 +1,7 @@
+# InDesign lock files — present only while a .indd is open
+*.idlk
+~*.idlk
+
 # Python
 __pycache__/
 *.pyc
