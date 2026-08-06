@@ -96,7 +96,11 @@ jobs:
             gh release upload "$TAG" "${files[@]}" --clobber
             gh release edit   "$TAG" --notes-file notes.md
           else
+            # --target pins the new tag to the commit this run actually built.
+            # Without it gh tags the default branch's HEAD, so a manual run from
+            # an older commit would label the wrong state.
             gh release create "$TAG" "${files[@]}" \
+              --target "$GITHUB_SHA" \
               --title "Manual build $TAG" --notes-file notes.md
           fi
           echo "Released $TAG" >> "$GITHUB_STEP_SUMMARY"
