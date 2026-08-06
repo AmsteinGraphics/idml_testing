@@ -219,13 +219,22 @@ size and spacing. `titles:lvl1` is currently a stylistic copy of `lvl2` (BasedOn
 no overrides of its own), so it looks identical and will follow if `lvl2` is restyled;
 give it its own attributes when it should diverge.
 
-A manual uses as many levels as it needs, **starting at the top**. Nothing is hardcoded
-to a particular style:
+A manual uses as many levels as it needs, **starting at the top**, and declares two
+things in `<product>.manual`:
 
-- The **chapter level** — one tab, one `<Section>` — is the shallowest heading style that
-  actually appears in the document (`sectionize.topmost_heading`).
-- The **numbering depth** of each style is read from that document's own `Styles.xml`
-  (`build_xref_boxes.heading_levels`), not assumed.
+- **`tab_level`** — which level carries a thumb tab and an InDesign `<Section>`. This
+  cannot be inferred and is an editorial call: DM42n has 5 `lvl1` parts and 23 `lvl2`
+  sections, and the tabs belong on `lvl2` — taking the topmost level would give 5 tabs.
+  Undeclared, the shallowest level present is used.
+- **`levels`** — how many levels the manual uses. This does *not* fix numbering: content
+  starting at `lvl1` already numbers correctly, because the counters start at the top.
+  It lets `validate_idml.py` catch content that **skips** the top level (the actual cause
+  of a leading zero) or reaches deeper than declared.
+
+Neither is required. Without them the toolchain reads the document: the chapter level
+becomes the shallowest heading present, and **numbering depth comes from that document's
+own `Styles.xml`** rather than being assumed — which is what keeps already-exported
+three-level submissions numbering `1.4.4` rather than `0.1.4.4`.
 
 That second point matters because a document carries its own copy of the styles. A
 submission poured before `lvl1` existed still has `titles:lvl2` at level 1 and numbers
@@ -270,16 +279,23 @@ finds and leaves content alone — `dm32_online_manual` is a URL, not a style, a
 Per-manual configuration lives **next to** a build directory (never inside it, so it
 never gets packed into the `.idml`):
 
-Discovery walks outward, most specific first: `<build>.swatches`, then any `*.swatches`
-in the build's parent (`manuals/<product>/<product>.swatches`), then the kit's default.
-So a manual directory carries its own config and nothing needs passing on the command
-line; `--swatches` / `--tabstops` still override.
+Discovery walks outward, most specific first: `<build>.manual`, then any `*.manual` in
+the build's parent (`manuals/<product>/<product>.manual`), then the kit's default. So a
+manual directory carries its own config and nothing needs passing on the command line;
+`--swatches` / `--tabstops` still override.
 
-- **`<product>.swatches`** — the sanctioned palette, one swatch name per line, `#`
-  comments. `validate_idml.py` flags any colour applied to a page item whose swatch
-  isn't listed, and treats a mixed ink built only from listed inks as listed;
-  `prune_swatches.py` keeps listed swatches even when currently unused.
-  The DM32 palette is Black + `PANTONE 292 U`, `PANTONE 130 U`, `PANTONE Warm Gray 1 U`.
+- **`<product>.manual`** — `key = value`, `#` comments, `swatch` may repeat:
+
+  ```
+  swatch = Black              # sanctioned palette; Black plus up to 3 spots
+  swatch = PANTONE 292 U
+  levels = 4                  # how many of titles:lvl1..lvl4 this manual uses
+  tab_level = 2               # which level carries a thumb tab and a section
+  ```
+
+  `validate_idml.py` flags any applied colour not listed (a mixed ink built only from
+  listed inks counts as listed); `prune_swatches.py` keeps listed swatches even when
+  unused. Both `levels` and `tab_level` are optional — see *The heading hierarchy*.
 - **`<product>.tabstops.csv`** — the header **names the inks** and is resolved against
   the document's own `Graphic.xml`; a column may name an ink in full (`PANTONE 292 U`)
   or short (`292`, `Black`). Each row is a gradient stop giving each ink's percentage.

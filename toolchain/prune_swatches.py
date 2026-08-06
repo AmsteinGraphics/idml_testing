@@ -25,20 +25,13 @@ GRAPHIC = os.path.join(DIR, "Resources", "Graphic.xml")
 def reads(f): return open(f, encoding="utf-8").read()
 
 # ---- load the project swatch whitelist (sanctioned palette) ----------------
-def find_whitelist(d, explicit):
-    if explicit:
-        return explicit
-    cand = os.path.join(os.path.dirname(d.rstrip("/")) or ".",
-                        os.path.basename(d.rstrip("/")) + ".swatches")
-    return cand if os.path.exists(cand) else None
-
-wl_path = find_whitelist(DIR, WL)
-whitelist = set()
-if wl_path and os.path.exists(wl_path):
-    for ln in reads(wl_path).splitlines():
-        ln = ln.split("#", 1)[0].strip()
-        if ln:
-            whitelist.add(ln)
+# Shared with validate_idml.py: the palette lives in the manual's .manual config,
+# found by walking outward from the build dir.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
+_conf = manualconf.load(DIR, WL)
+wl_path = _conf["path"] if _conf["swatches"] else None
+whitelist = set(_conf["swatches"])
 
 STRUCTURAL = {"Black", "Paper", "Registration", "None"}
 def protected(name):

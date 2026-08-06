@@ -105,9 +105,22 @@ def topmost_heading(build, candidates=None):
     return (candidates or HEADING_LEVELS)[0]
 
 
+def chapter_style_for(build):
+    """The heading level that carries a tab and a section.
+
+    `tab_level` in the manual's config wins, because this is an editorial choice
+    that cannot be inferred: DM42n has 5 lvl1 parts and 23 lvl2 sections and wants
+    the tabs on lvl2, where taking the topmost level would give 5 tabs. Without a
+    declaration, fall back to the shallowest level actually present.
+    """
+    import manualconf
+    declared = manualconf.load(build)["chapter_style"]
+    return declared or topmost_heading(build)
+
+
 def detect_chapters(build, chapter_style=None):
     if chapter_style is None:
-        chapter_style = topmost_heading(build)
+        chapter_style = chapter_style_for(build)
     style_self = "ParagraphStyle/" + chapter_style.replace(":", "%3a")
     ordered_pages, frames_by_story, pages_by_spread = load_layout(build)
     page_index = {p["self"]: i for i, p in enumerate(ordered_pages)}

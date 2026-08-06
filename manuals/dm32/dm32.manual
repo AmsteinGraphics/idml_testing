@@ -1,0 +1,26 @@
+# Per-manual configuration. Lives NEXT TO the build dir, never inside it, so it
+# is not packed into the .idml. Discovery: <build>.manual, then *.manual in the
+# build's parent, then the kit's default.
+#
+# key = value, # comments, blank lines ignored. `swatch` may repeat.
+
+# Sanctioned palette. prune_swatches.py keeps these even when unused;
+# validate_idml.py flags any applied colour that is not listed (a mixed ink built
+# only from listed inks counts as listed). Black plus up to 3 spots, Black always.
+swatch = Black
+swatch = PANTONE 292 U
+swatch = PANTONE 130 U
+swatch = PANTONE Warm Gray 1 U
+
+# How many of titles:lvl1..lvl4 this manual uses, counting from the top.
+# Optional. It does NOT fix numbering -- content starting at lvl1 already numbers
+# correctly. It lets validate_idml.py catch content that SKIPS the top level
+# (the cause of a leading zero, "0.1.4") or reaches deeper than declared.
+# Not declared: the exported submissions use the pre-lvl1 hierarchy
+# (titles:lvl2/3/4 at levels 1/2/3), so their own styles are read instead.
+# levels = 3
+
+# Which heading level carries a thumb tab and an InDesign section. Optional;
+# without it the shallowest level present is used. Declare it when that is not
+# what you want -- 5 lvl1 parts and 23 lvl2 sections means tabs on lvl2, not 5 tabs.
+# tab_level = 1

@@ -137,24 +137,13 @@ check(not bad_thread, f"text-frame thread -> missing frame: {sorted(bad_thread)[
 # toolchain / kit / manuals a build at manuals/<product>/build finds its whitelist
 # one level up as manuals/<product>/<product>.swatches. The kit's own file is the
 # last resort, which is where a new manual starts.
-def _find_swatches(d):
-    b = d.rstrip("/")
-    parent = os.path.dirname(b) or "."
-    here = os.path.dirname(os.path.abspath(__file__))
-    for p in [b + ".swatches"] + sorted(glob.glob(os.path.join(parent, "*.swatches"))) + \
-             [os.path.join(here, "..", "kit", "manual_kit.swatches")]:
-        if os.path.exists(p):
-            return p
-    return None
-
-wl_path = _WL or _find_swatches(D)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
+_conf = manualconf.load(D, _WL)
+wl_path = _conf["path"] if _conf["swatches"] else None
 wl_report = "no whitelist -> color check skipped"
 if wl_path and os.path.exists(wl_path):
-    allow = set()
-    for ln in reads(wl_path).splitlines():
-        ln = ln.split("#", 1)[0].strip()
-        if ln:
-            allow.add(ln)
+    allow = set(_conf["swatches"])
     gm = reads(os.path.join(D, "Resources", "Graphic.xml"))
     id2name = {}
     for tag in ("Color", "Tint", "Gradient", "MixedInk", "MixedInkGroup"):
@@ -268,6 +257,36 @@ check(not hl_hits,
       f"-- blue process-CMYK, not the house CharacterStyle/link (PANTONE 130 U)"
       + "".join(f"\n      {p}: {(repr(txt[:50]) if txt else '(empty range)')}"
                 for p, txt in hl_hits[:6]))
+
+# ---- 10c. heading hierarchy matches what the manual declares ---------------
+# Only runs when the manual declares `levels`. Numbering itself is correct as long
+# as content starts at lvl1 -- the counters start at the top -- so what this
+# catches is content that SKIPS the top level, which is what puts a leading zero
+# in front of every number ("0.1.4"), and content reaching deeper than declared.
+if _conf["levels"]:
+    declared = _conf["levels"]
+    used = {}
+    for f in stories:
+        t = reads(f)
+        for m in re.finditer(r'AppliedParagraphStyle="ParagraphStyle/titles%3alvl(\d)"', t):
+            used[int(m.group(1))] = used.get(int(m.group(1)), 0) + 1
+    if used:
+        top, deepest = min(used), max(used)
+        check(top == 1,
+              f"content skips heading level(s) 1..{top - 1}: the shallowest used is "
+              f"titles:lvl{top}, so every number gets a leading zero "
+              f"(a '1.4' would render '{'0.' * (top - 1)}1.4'). Tag the top-level "
+              f"headings titles:lvl1, or drop `levels` from "
+              f"{os.path.basename(_conf['path'] or 'the manual config')}.")
+        check(deepest <= declared,
+              f"content uses titles:lvl{deepest} but the manual declares only "
+              f"{declared} level(s); raise `levels` or restyle those headings")
+    tab = _conf["tab_level"]
+    if tab:
+        check(tab in used or not used,
+              f"tab_level is {tab} but no titles:lvl{tab} heading appears in the "
+              f"content, so there would be no tabs (levels present: "
+              f"{sorted(used) or 'none'})")
 
 # ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
