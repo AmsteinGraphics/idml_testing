@@ -131,11 +131,19 @@ python3 toolchain/build_manual.py manuals/dm32/submissions/SUB.idml
 # -> manuals/dm32/out/SUB.ready.idml  + SUB.xref_log.csv
 ```
 
-CI runs exactly this. `.github/workflows/build-manual.yml` triggers on any change under
-`manuals/*/submissions/`, or under `toolchain/` or `kit/` (which affect every manual),
-builds each submission, fails if one doesn't validate, and uploads the ready-for-InDesign
-files as artifacts. It stops at the InDesign break like everything else — CI cannot run
-the JSX.
+CI runs exactly this, in two workflows:
+
+- **`build-manual.yml`** — on any change under `manuals/*/submissions/`, or under
+  `toolchain/` or `kit/` (which affect every manual). Builds each submission, fails if
+  one doesn't validate, uploads the ready files as run artifacts (30-day retention).
+  This is the routine check that a submission survives the pipeline.
+- **`release-manual.yml`** — on a `v*` tag, or run manually for one submission. Attaches
+  the ready files to a GitHub Release, which is permanent and has a direct download URL.
+  Release assets live outside the git object database, so promoting a build never puts a
+  1.4 MB IDML into history — which is why builds are not committed to a branch instead.
+
+Neither can finish a manual: CI cannot run the JSX. Nothing is written back to the repo —
+`manuals/*/out/` is gitignored and no workflow commits or pushes.
 
 Or the same thing stage by stage:
 

@@ -1,0 +1,103 @@
+name: Release manual
+
+# Promote a build to a permanent download. Release assets live on the repo's
+# Releases page but OUTSIDE the git object database, so a 1.4 MB IDML per release
+# never lands in history and the clone stays the same size — which is why builds
+# are not committed to a branch instead.
+#
+# Deliberately NOT on every push: you choose what gets promoted, either by pushing
+# a tag or by running this manually. The routine per-push validation is
+# build-manual.yml, whose artifacts expire after 30 days.
+#
+# Like everything else, this stops at the InDesign break. What gets attached is
+# the file to OPEN and run place_xref_boxes.jsx on, not a finished manual.
+
+on:
+  push:
+    tags:
+      - 'v*'              # tag a state as ready -> release every submission
+  workflow_dispatch:
+    inputs:
+      submission:
+        description: 'Submission to promote (blank = every submission)'
+        required: false
+        default: ''
+      tag:
+        description: 'Release tag (blank = build-<run number>)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write         # required to create a release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the submissions being promoted
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.submission }}" ]; then
+            printf '%s\n' "${{ github.event.inputs.submission }}" > picked.txt
+          else
+            git ls-files 'manuals/*/submissions/*.idml' > picked.txt
+          fi
+          echo "Promoting:"; cat picked.txt
+          while read -r sub; do
+            [ -n "$sub" ] || continue
+            [ -f "$sub" ] || { echo "::error::no such submission: $sub"; exit 1; }
+            echo "::group::$sub"
+            python3 toolchain/build_manual.py "$sub"
+            echo "::endgroup::"
+          done < picked.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="${{ github.event.inputs.tag }}"
+            [ -n "$TAG" ] || TAG="build-${{ github.run_number }}"
+          fi
+
+          files=(manuals/*/out/*.ready.idml manuals/*/out/*.xref_log.csv)
+          [ -e "${files[0]}" ] || { echo "::error::nothing was built"; exit 1; }
+
+          {
+            echo "Built from \`${GITHUB_SHA:0:7}\` by the forward pipeline, up to the"
+            echo "InDesign break."
+            echo
+            echo "**These are not finished manuals.** Each \`.ready.idml\` has sections,"
+            echo "tabs and dead-link suppression applied, and is the file to open in"
+            echo "InDesign and run \`toolchain/place_xref_boxes.jsx\` on — margin boxes"
+            echo "cannot be authored in IDML, they only bind when InDesign creates them."
+            echo "Afterwards: \`fix_underlines.py\` → \`validate_idml.py\` → \`repack.py\`."
+            echo
+            echo "| file | oblique links | dead links suppressed |"
+            echo "|---|---|---|"
+            for f in manuals/*/out/*.xref_log.csv; do
+              [ -e "$f" ] || continue
+              b=$(grep -cE '^(jsx-)?box,' "$f" || true)
+              d=$(grep -c  '^suppressed,'  "$f" || true)
+              echo "| \`$(basename "${f%.xref_log.csv}").ready.idml\` | $b | $d |"
+            done
+          } > notes.md
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit   "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" "${files[@]}" \
+              --title "Manual build $TAG" --notes-file notes.md
+          fi
+          echo "Released $TAG" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --json url -q .url >> "$GITHUB_STEP_SUMMARY"
