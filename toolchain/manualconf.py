@@ -16,6 +16,11 @@ build's parent (manuals/<product>/<product>.manual), then the kit's default.
     # Which heading level carries a thumb tab and an InDesign section.
     tab_level = 2
 
+    # The first level that takes part in numbering. Levels above it are unnumbered
+    # labels, so the level below counts straight through them rather than
+    # restarting: Part 1 ends at section 4, Part 2 opens at section 5.
+    number_from = 2
+
     # Tab-strip ink ramp, top of the strip to the bottom. A bare ink name is that
     # ink at 100%; mixes are "PANTONE 292 U 60%, Black 40%".
     tab_stop = PANTONE 292 U
@@ -78,7 +83,8 @@ def parse_stop(value, where):
 
 def load(build, explicit=None):
     """{swatches, levels, tab_level, tab_stops, chapter_style, heading_styles, path}."""
-    conf = dict(swatches=[], levels=None, tab_level=None, tab_stops=[], path=None)
+    conf = dict(swatches=[], levels=None, tab_level=None, number_from=None,
+                tab_stops=[], path=None)
 
     path = explicit
     if path and not os.path.exists(path):
@@ -99,13 +105,14 @@ def load(build, explicit=None):
                 conf["swatches"].append(v)
             elif k == "tab_stop":
                 conf["tab_stops"].append(parse_stop(v, f"{path}:{n}"))
-            elif k in ("levels", "tab_level"):
+            elif k in ("levels", "tab_level", "number_from"):
                 if not v.isdigit():
                     raise SystemExit(f"{path}:{n}: {k} must be a number, got {v!r}")
                 conf[k] = int(v)
             else:
                 raise SystemExit(f"{path}:{n}: unknown key {k!r} "
-                                 f"(expected swatch, tab_stop, levels, tab_level)")
+                                 f"(expected swatch, tab_stop, levels, tab_level, "
+                                 f"number_from)")
     else:
         # a pre-consolidation manual may still carry the palette on its own
         legacy = next((p for p in candidates(build, ".swatches") if os.path.exists(p)), None)
@@ -116,7 +123,7 @@ def load(build, explicit=None):
                 if s:
                     conf["swatches"].append(s)
 
-    lv, tab = conf["levels"], conf["tab_level"]
+    lv, tab, nf = conf["levels"], conf["tab_level"], conf["number_from"]
     if lv is not None and not 1 <= lv <= 4:
         raise SystemExit(f"{conf['path']}: levels must be 1..4, got {lv}")
     if tab is not None:
@@ -126,6 +133,18 @@ def load(build, explicit=None):
             raise SystemExit(f"{conf['path']}: tab_level {tab} is deeper than the "
                              f"{lv} level(s) this manual declares")
 
+    if nf is not None:
+        if nf < 1:
+            raise SystemExit(f"{conf['path']}: number_from must be >= 1, got {nf}")
+        if lv is not None and nf > lv:
+            raise SystemExit(f"{conf['path']}: number_from {nf} is deeper than the "
+                             f"{lv} level(s) this manual declares")
+
     conf["heading_styles"] = [f"titles:lvl{i}" for i in range(1, (lv or 4) + 1)]
     conf["chapter_style"] = f"titles:lvl{tab}" if tab else None
+    # Levels above number_from are unnumbered labels — "Part 1: Getting Started" —
+    # and take no part in the counting, so sections run straight through the parts
+    # instead of restarting inside each one.
+    conf["numbered_styles"] = conf["heading_styles"][(nf - 1):] if nf else None
+    conf["unnumbered_styles"] = conf["heading_styles"][:(nf - 1)] if nf else []
     return conf

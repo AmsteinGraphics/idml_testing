@@ -16,6 +16,10 @@ Idempotent. Run early, before sectionize/apply_tabs/build_xref_boxes.
 import argparse
 import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
 
 
 def fix_style(styles_xml, name, list_name):
@@ -52,13 +56,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
     ap.add_argument("--list", default="manual_list")
-    ap.add_argument("--styles", default="titles:lvl1,titles:lvl2,titles:lvl3")
+    ap.add_argument("--styles", default=None,
+                    help="default: the manual config's numbered levels, else "
+                         "titles:lvl1..lvl3")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
+    # Only the levels that actually take part in numbering get joined to the list.
+    # Joining a label level (a "Part") would make it advance the top counter and
+    # restart the level below inside each part.
+    styles = args.styles
+    if styles is None:
+        conf = manualconf.load(args.build)
+        styles = ",".join(conf["numbered_styles"] or
+                          ["titles:lvl1", "titles:lvl2", "titles:lvl3"])
+
     path = os.path.join(args.build, "Resources", "Styles.xml")
     x = open(path, encoding="utf-8").read()
-    for name in args.styles.split(","):
+    for name in styles.split(","):
         x, status = fix_style(x, name.strip(), args.list)
         print(f"  {name.strip():14} -> {status}")
     if args.dry_run:

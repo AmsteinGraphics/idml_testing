@@ -28,3 +28,6 @@ tab_level = 2
 # ink becomes a plain Color/ + FillTint so the spot prints solid.
 tab_stop = PANTONE 130 U
 tab_stop = PANTONE 130 U, Black
+
+# Sections number straight through the parts: a Part is a label, not a counter.
+number_from = 2

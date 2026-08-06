@@ -88,7 +88,7 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 
 | script | what it does | run |
 |---|---|---|
-| `toolchain/restyle_heading_levels.py` | set which paragraph styles are heading levels 1..N, creating any that are missing | `restyle_heading_levels.py <dir> --levels a,b,c,d` |
+| `toolchain/restyle_heading_levels.py` | apply the configured heading hierarchy — set levels 1..N, create missing styles, and take label levels out of the numbering | `restyle_heading_levels.py <dir>` |
 | `toolchain/build_manual.py` | run the whole pre-InDesign leg for one submission — the sequence below, in one command | `build_manual.py manuals/<p>/submissions/<f>.idml` |
 | `toolchain/standardize_kit.py` | strip a product prefix off the kit's shared design-system objects (`dm32_list` -> `manual_list`, …) | `standardize_kit.py <dir> [--from P] [--to Q]` |
 | `toolchain/fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
@@ -151,7 +151,8 @@ Or the same thing stage by stage:
 B=manuals/dm32/build
 python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUB.idml').extractall('$B')"
 
-python3 toolchain/fix_numbering.py      $B   # lvl2/lvl3 -> manual_list, so numbering counts up
+python3 toolchain/restyle_heading_levels.py $B   # apply number_from (no-op if undeclared)
+python3 toolchain/fix_numbering.py      $B   # join the numbered levels to manual_list
 python3 toolchain/sectionize.py         $B   # one <Section> per titles:lvl2 chapter
 python3 toolchain/configure_chapters.py $B   # rebuild the tab strip for THIS manual's N
 python3 toolchain/apply_tabs.py         $B   # S<k> master per chapter, applied to its pages
@@ -225,6 +226,12 @@ things in `<product>.manual`:
   cannot be inferred and is an editorial call: DM42n has 5 `lvl1` parts and 23 `lvl2`
   sections, and the tabs belong on `lvl2` — taking the topmost level would give 5 tabs.
   Undeclared, the shallowest level present is used.
+- **`number_from`** — the first level that takes part in numbering. Levels above it
+  are unnumbered labels and do not advance any counter, so the level below runs
+  straight through them instead of restarting inside each one. DM42n sets
+  `number_from = 2`: `lvl1` is `Part 1: Getting Started`, a label, while `lvl2`
+  sections count 1…23 across the whole book — Part 1 ends at section 4 and Part 2
+  opens at section 5. Undeclared, the document's own hierarchy is left alone.
 - **`levels`** — how many levels the manual uses. This does *not* fix numbering: content
   starting at `lvl1` already numbers correctly, because the counters start at the top.
   It lets `validate_idml.py` catch content that **skips** the top level (the actual cause

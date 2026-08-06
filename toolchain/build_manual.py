@@ -12,7 +12,7 @@ authored in IDML — InDesign never binds a hand-written anchored frame on impor
 so they are created natively by place_xref_boxes.jsx, inside InDesign, by a human.
 What this produces is the file to open and run that script on:
 
-    submission -> standardize -> numbering -> sections -> tab strip -> tabs
+    submission -> standardize -> hierarchy -> numbering -> sections -> tabs
                -> dead-link suppression + audit -> validate -> <name>.ready.idml
                                                                         |
                         open in InDesign, run place_xref_boxes.jsx, export IDML
@@ -78,6 +78,7 @@ def main():
 
     # idempotent on an already-standard document; migrates a pre-standardisation one
     run("standardize_kit.py", build)
+    run("restyle_heading_levels.py", build)   # no-op unless number_from is declared
     run("fix_numbering.py", build)
     run("sectionize.py", build)
     run("configure_chapters.py", build)

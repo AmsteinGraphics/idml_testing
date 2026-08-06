@@ -28,6 +28,9 @@ import re
 import sys
 import uuid
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manualconf
+
 STYLE_RE = r'<ParagraphStyle\b[^>]*\bSelf="ParagraphStyle/%s"[^>]*?(?:/>|>.*?</ParagraphStyle>)'
 
 
@@ -53,14 +56,29 @@ def find(styles, name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
-    ap.add_argument("--levels", required=True,
-                    help="comma-separated paragraph style names, top level first")
+    ap.add_argument("--levels",
+                    help="comma-separated paragraph style names, top level first "
+                         "(default: the manual config's numbered_styles)")
+    ap.add_argument("--unnumbered", default="",
+                    help="comma-separated styles to REMOVE from numbering "
+                         "(default: the config's levels above number_from)")
+    ap.add_argument("--config", help="explicit <product>.manual path")
     ap.add_argument("--model", help="style to copy when creating a missing one "
                                     "(default: the first level that already exists)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    levels = [s.strip() for s in args.levels.split(",") if s.strip()]
+    unnumbered = [s.strip() for s in args.unnumbered.split(",") if s.strip()]
+    if args.levels:
+        levels = [s.strip() for s in args.levels.split(",") if s.strip()]
+    else:
+        conf = manualconf.load(args.build, args.config)
+        levels = conf["numbered_styles"]
+        if not levels:
+            print("manual config declares no number_from — leaving the document's "
+                  "own hierarchy alone")
+            return 0
+        unnumbered = unnumbered or conf["unnumbered_styles"]
     if not levels:
         raise SystemExit("--levels is empty")
 
@@ -102,17 +120,37 @@ def main():
             changed.append((name, old_lvl.group(1) if old_lvl else "-", i))
             styles = styles[:m.start()] + new + m.group(0)[len(tag):] + styles[m.end():]
 
+    # Take the label levels OUT of the numbering. A level that stays in the list
+    # keeps advancing its counter and prefixing its own number; removing it is what
+    # makes the level below run straight through instead of restarting under it.
+    detached = []
+    for name in unnumbered:
+        m = find(styles, name)
+        if not m:
+            continue
+        blk = m.group(0)
+        tag = re.match(r'<ParagraphStyle\b[^>]*?(?:/>|>)', blk).group(0)
+        new = re.sub(r'\s*\bNumbering(?:Level|Expression)="[^"]*"', "", tag)
+        new = re.sub(r'\s*\bBulletsAndNumberingListType="[^"]*"', "", new)
+        body = re.sub(r'[ \t]*<AppliedNumberingList\b[^>]*>.*?</AppliedNumberingList>\s*\n?',
+                      "", blk[len(tag):], flags=re.S)
+        if new + body != blk:
+            styles = styles[:m.start()] + new + body + styles[m.end():]
+            detached.append(name)
+
     for name, lvl in created:
         print(f"created {name:16s} level {lvl}  expression {expression(lvl)!r}  "
               f"(stylistic copy of {model})")
     for name, was, now in changed:
         print(f"moved   {name:16s} level {was} -> {now}  expression {expression(now)!r}")
-    if not created and not changed:
+    for name in detached:
+        print(f"unnumber {name:16s} removed from the numbered list (label only)")
+    if not created and not changed and not detached:
         print("hierarchy already matches — nothing to do")
     if args.dry_run:
         print("(dry-run: nothing written)")
         return 0
-    if created or changed:
+    if created or changed or detached:
         open(path, "w", encoding="utf-8").write(styles)
         print(f"wrote {path}")
     return 0

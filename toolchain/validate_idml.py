@@ -271,9 +271,14 @@ if _conf["levels"]:
         for m in re.finditer(r'AppliedParagraphStyle="ParagraphStyle/titles%3alvl(\d)"', t):
             used[int(m.group(1))] = used.get(int(m.group(1)), 0) + 1
     if used:
+        # numbering starts at number_from; levels above it are unnumbered labels and
+        # take no part in the counting, so they are not what a leading zero is about
+        first = _conf["number_from"] or 1
+        used = {k: v for k, v in used.items() if k >= first}
+    if used:
         top, deepest = min(used), max(used)
-        check(top == 1,
-              f"content skips heading level(s) 1..{top - 1}: the shallowest used is "
+        check(top == first,
+              f"content skips heading level(s) {first}..{top - 1}: the shallowest used is "
               f"titles:lvl{top}, so every number gets a leading zero "
               f"(a '1.4' would render '{'0.' * (top - 1)}1.4'). Tag the top-level "
               f"headings titles:lvl1, or drop `levels` from "
