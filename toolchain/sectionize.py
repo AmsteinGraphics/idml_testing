@@ -84,7 +84,30 @@ def page_for_frame(fr, pages_by_spread):
 # --------------------------------------------------------------------------- #
 # Chapter detection
 # --------------------------------------------------------------------------- #
-def detect_chapters(build, chapter_style):
+# The heading hierarchy, top-down. A manual uses as many levels as it needs,
+# starting at the top -- so the chapter level is the shallowest one that actually
+# appears, not a fixed style. That keeps three-level content working after a
+# fourth level was added to the kit above it.
+HEADING_LEVELS = ["titles:lvl1", "titles:lvl2", "titles:lvl3", "titles:lvl4"]
+
+
+def topmost_heading(build, candidates=None):
+    """The shallowest heading style that appears in the document = its chapter level."""
+    used = set()
+    for s in glob.glob(os.path.join(build, "Stories", "*.xml")):
+        raw = open(s, encoding="utf-8").read()
+        for name in (candidates or HEADING_LEVELS):
+            if f'AppliedParagraphStyle="ParagraphStyle/{name.replace(":", "%3a")}"' in raw:
+                used.add(name)
+    for name in (candidates or HEADING_LEVELS):
+        if name in used:
+            return name
+    return (candidates or HEADING_LEVELS)[0]
+
+
+def detect_chapters(build, chapter_style=None):
+    if chapter_style is None:
+        chapter_style = topmost_heading(build)
     style_self = "ParagraphStyle/" + chapter_style.replace(":", "%3a")
     ordered_pages, frames_by_story, pages_by_spread = load_layout(build)
     page_index = {p["self"]: i for i, p in enumerate(ordered_pages)}
@@ -200,7 +223,8 @@ def existing_self_ids(build):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
-    ap.add_argument("--chapter-style", default="titles:lvl2")
+    ap.add_argument("--chapter-style", default=None,
+                    help="default: the shallowest heading level present")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 

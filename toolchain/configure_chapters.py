@@ -184,7 +184,7 @@ def main():
 
     n = args.n
     if n is None:
-        chapters, _ = S.detect_chapters(build, "titles:lvl2")
+        chapters, _ = S.detect_chapters(build)   # topmost level present
         n = len(chapters)
         if not n:
             raise SystemExit("no chapters detected; pass --n N explicitly")

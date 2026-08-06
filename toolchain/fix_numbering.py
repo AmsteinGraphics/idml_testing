@@ -52,7 +52,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
     ap.add_argument("--list", default="manual_list")
-    ap.add_argument("--styles", default="titles:lvl2,titles:lvl3")
+    ap.add_argument("--styles", default="titles:lvl1,titles:lvl2,titles:lvl3")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 

@@ -89,6 +89,7 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 
 | script | what it does | run |
 |---|---|---|
+| `toolchain/restyle_heading_levels.py` | set which paragraph styles are heading levels 1..N, creating any that are missing | `restyle_heading_levels.py <dir> --levels a,b,c,d` |
 | `toolchain/build_manual.py` | run the whole pre-InDesign leg for one submission — the sequence below, in one command | `build_manual.py manuals/<p>/submissions/<f>.idml` |
 | `toolchain/standardize_kit.py` | strip a product prefix off the kit's shared design-system objects (`dm32_list` -> `manual_list`, …) | `standardize_kit.py <dir> [--from P] [--to Q]` |
 | `toolchain/fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
@@ -208,6 +209,35 @@ Baseline for v1.76: 190 complete oblique links, 3 broken, 20 orphan destinations
 cross-checked and are **not** defects — see `missing_underline_verified.csv`.
 
 ---
+
+## The heading hierarchy
+
+Four levels, top-down: `titles:lvl1` … `titles:lvl4`, numbering `1`, `1.2`, `1.2.3`,
+`1.2.3.4`. The style chain runs the other way — `lvl4` is the base style and carries the
+`manual_list` numbering list, with `lvl3`, `lvl2`, `lvl1` chained onto it, each overriding
+size and spacing. `titles:lvl1` is currently a stylistic copy of `lvl2` (BasedOn it with
+no overrides of its own), so it looks identical and will follow if `lvl2` is restyled;
+give it its own attributes when it should diverge.
+
+A manual uses as many levels as it needs, **starting at the top**. Nothing is hardcoded
+to a particular style:
+
+- The **chapter level** — one tab, one `<Section>` — is the shallowest heading style that
+  actually appears in the document (`sectionize.topmost_heading`).
+- The **numbering depth** of each style is read from that document's own `Styles.xml`
+  (`build_xref_boxes.heading_levels`), not assumed.
+
+That second point matters because a document carries its own copy of the styles. A
+submission poured before `lvl1` existed still has `titles:lvl2` at level 1 and numbers
+`1.4.4`; one poured from the current kit has it at level 2. Both are computed correctly.
+
+> **Adding a level is not backwards compatible for content.** Existing content re-poured
+> into the current kit gains a place and a leading zero — a former `1.4.4` becomes
+> `0.1.4.4` — because level 1's counter never advances without a `titles:lvl1` heading.
+> Content written against the old hierarchy needs headings at the new top level. The
+> already-exported submissions are unaffected: they keep their own three-level styles.
+
+`restyle_heading_levels.py` performs the change and is re-runnable for a fifth level.
 
 ## Starting a new manual
 

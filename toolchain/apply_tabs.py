@@ -276,7 +276,7 @@ def main():
     args = ap.parse_args()
     build = args.build
 
-    chapters, ordered_pages = S.detect_chapters(build, "titles:lvl2")
+    chapters, ordered_pages = S.detect_chapters(build)   # topmost level present
     if not chapters:
         raise SystemExit("no chapters found")
     secs = S.compute_sections(chapters, ordered_pages)

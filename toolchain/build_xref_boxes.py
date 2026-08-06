@@ -4,7 +4,7 @@
 A submission carries underlined trigger words (CharacterStyle/link[_slant] with a
 HyperlinkTextSource) already wired by a <Hyperlink> to a destination anchor, but
 NO margin boxes, and the section headings carry LIVE manual_list auto-numbering
-(titles:lvl2/3/4). For every underlined word this does one of two things:
+(the titles:lvl* hierarchy). For every underlined word this does one of two things:
 
   RESOLVABLE (destination is a named anchor present in the document) -> build the
   margin box: a margin story (cross_ref_par / code_styles:cross_ref /
@@ -39,7 +39,24 @@ import sectionize as S
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAMED = {"HyperlinkTextDestination", "ParagraphDestination"}
-LEVELS = {"titles:lvl2": 1, "titles:lvl3": 2, "titles:lvl4": 3}
+def heading_levels(build):
+    """{heading style: NumberingLevel} read from THIS document's own styles.
+
+    Not a constant: a document carries its own Styles.xml, so a submission poured
+    before a level was added to the kit still has titles:lvl2 at level 1 while a
+    newer one has it at level 2. Hardcoding the map would compute "0.4.4" for the
+    older document where InDesign renders "1.4.4".
+    """
+    t = open(os.path.join(build, "Resources", "Styles.xml"), encoding="utf-8").read()
+    levels = {}
+    for m in re.finditer(r'<ParagraphStyle\b[^>]*?(?:/>|>)', t):
+        nm = re.search(r'\bName="([^"]*)"', m.group(0))
+        lv = re.search(r'\bNumberingLevel="(\d+)"', m.group(0))
+        if nm and lv and nm.group(1) in S.HEADING_LEVELS:
+            levels[nm.group(1)] = int(lv.group(1))
+    if not levels:      # nothing declares a level -- fall back to hierarchy order
+        levels = {n: i for i, n in enumerate(S.HEADING_LEVELS, start=1)}
+    return levels
 
 HYPERLINK_TMPL = (
     '\t<Hyperlink Self="{self}" Name="Référence croisée {n}" Source="{src}" '
@@ -97,8 +114,9 @@ def load_templates(build=None, fmt_name="manual_cross_ref"):
 # destination anchor to the number of the heading paragraph it sits in.
 # --------------------------------------------------------------------------- #
 def compute_section_numbers(build):
-    chapters, _ = S.detect_chapters(build, "titles:lvl2")
-    counters = [0, 0, 0]
+    chapters, _ = S.detect_chapters(build)   # topmost level present
+    LEVELS = heading_levels(build)
+    counters = [0] * (max(LEVELS.values()) if LEVELS else 1)
     key_to_number = {}
     for c in chapters:
         path = os.path.join(build, "Stories", f"Story_{c['story']}.xml")
@@ -111,7 +129,7 @@ def compute_section_numbers(build):
             if not lvl:
                 continue
             counters[lvl - 1] += 1
-            for j in range(lvl, 3):
+            for j in range(lvl, len(counters)):
                 counters[j] = 0
             number = ".".join(str(counters[i]) for i in range(lvl))
             for d in psr.iter():
