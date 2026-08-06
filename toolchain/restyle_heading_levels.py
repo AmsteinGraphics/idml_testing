@@ -120,9 +120,13 @@ def main():
             changed.append((name, old_lvl.group(1) if old_lvl else "-", i))
             styles = styles[:m.start()] + new + m.group(0)[len(tag):] + styles[m.end():]
 
-    # Take the label levels OUT of the numbering. A level that stays in the list
-    # keeps advancing its counter and prefixing its own number; removing it is what
-    # makes the level below run straight through instead of restarting under it.
+    # Take the label levels OUT of the numbering, by OVERRIDE rather than removal.
+    #
+    # These styles are chained -- titles:lvl1 is BasedOn titles:lvl2 -- so deleting
+    # lvl1's numbering attributes does not un-number it, it makes it INHERIT lvl2's:
+    # NumberedList on manual_list at level 1. The Parts then consume section numbers
+    # and the sections never reach their expected count. The switch has to be set
+    # explicitly to NoList so it beats what the parent says.
     detached = []
     for name in unnumbered:
         m = find(styles, name)
@@ -131,7 +135,7 @@ def main():
         blk = m.group(0)
         tag = re.match(r'<ParagraphStyle\b[^>]*?(?:/>|>)', blk).group(0)
         new = re.sub(r'\s*\bNumbering(?:Level|Expression)="[^"]*"', "", tag)
-        new = re.sub(r'\s*\bBulletsAndNumberingListType="[^"]*"', "", new)
+        new = set_attr(new, "BulletsAndNumberingListType", "NoList")
         body = re.sub(r'[ \t]*<AppliedNumberingList\b[^>]*>.*?</AppliedNumberingList>\s*\n?',
                       "", blk[len(tag):], flags=re.S)
         if new + body != blk:
