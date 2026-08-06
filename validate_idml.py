@@ -14,7 +14,7 @@ next to the dir), any color APPLIED to a page item whose swatch name is not in
 the whitelist (structural None/Paper/Registration/$ID always allowed) is flagged
 -- enforcing the per-project "only these colors, never more" rule.
 """
-import os, re, sys, glob
+import os, re, sys, glob, urllib.parse
 import xml.etree.ElementTree as ET
 
 _pos = [a for a in sys.argv[1:] if not a.startswith("-")]
@@ -151,10 +151,30 @@ if wl_path and os.path.exists(wl_path):
             nm = re.search(r'\bName="([^"]*)"', m.group(1))
             if sid:
                 id2name[sid.group(1)] = nm.group(1) if nm else ""
+    # A mixed ink built only from sanctioned inks is itself sanctioned -- the
+    # generated tab swatches (tab_00..) are tweens of the palette, so listing them
+    # individually would mean re-listing the whitelist every time N changes.
+    mixed_ok = set()
+    for m in re.finditer(r'<MixedInk\b([^>]*?)/?>', gm):
+        sid = re.search(r'\bSelf="([^"]+)"', m.group(1))
+        il = re.search(r'\bInkList="([^"]*)"', m.group(1))
+        if not sid or not il:
+            continue
+        names = []
+        for x in il.group(1).split():
+            x = urllib.parse.unquote(x)
+            for pre in ("Ink/", "$ID/"):
+                if x.startswith(pre):
+                    x = x[len(pre):]
+            names.append("Black" if x == "Process Black" else x)
+        if names and all(x in allow for x in names):
+            mixed_ok.add(sid.group(1))
+
     def allowed(cid):
         nm = id2name.get(cid, cid.split("/", 1)[-1])
         return (nm in allow or nm in ("Paper", "Registration", "None")
-                or nm.startswith("$ID/") or cid in ("Swatch/None",))
+                or nm.startswith("$ID/") or cid in ("Swatch/None",)
+                or cid in mixed_ok)
     COLOR_ATTRS = ("FillColor", "StrokeColor", "GradientFillColor",
                    "UnderlineColor", "StrikeThroughColor")
     offenders = {}   # name -> count (applied on page items only, not style defs)

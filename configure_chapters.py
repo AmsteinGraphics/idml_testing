@@ -156,20 +156,26 @@ def main():
     if not bt_path:
         raise SystemExit("BT-BaseTabs master not found")
 
-    # A chapter master built off the OLD grid would keep stale swatches and slots.
-    # Key on the generated naming (apply_tabs.py mints NamePrefix S1..SN), not on
-    # fill colour -- the kit's own Sx-Section master carries a PANTONE fill too.
-    stale = []
+    # Chapter masters, if this tree has any. Keyed on the naming convention
+    # (NamePrefix S1..SN, as both v1.76 and apply_tabs.py use), NOT on fill colour
+    # -- the kit's own Sx-Section master carries a PANTONE fill too. A tree with
+    # none is the forward-pipeline case: apply_tabs.py mints them afterwards.
+    chapter_masters = {}
     for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
         if f == bt_path:
             continue
-        m = re.search(r'<MasterSpread\b[^>]*\bNamePrefix="(S\d+)"', open(f, encoding="utf-8").read())
+        t = open(f, encoding="utf-8").read()
+        m = re.search(r'<MasterSpread\b[^>]*\bNamePrefix="S(\d+)"', t)
         if m:
-            stale.append((f, m.group(1)))
-    if stale:
-        raise SystemExit(f"{len(stale)} chapter master(s) already built off the old grid "
-                         f"({', '.join(sorted(p for _, p in stale)[:4])}...).\nRun "
-                         f"configure_chapters.py BEFORE apply_tabs.py, on a tree that has none.")
+            chapter_masters[int(m.group(1))] = (f, t)
+
+    base_self = None
+    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
+        t = open(f, encoding="utf-8").read()
+        m = re.search(r'<MasterSpread\b[^>]*\bName="B-Base"[^>]*>', t)
+        if m or re.search(r'<MasterSpread\b[^>]*\bNamePrefix="B"\s', t):
+            base_self = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1)
+            break
 
     # --- templates: one tab rect and one number frame per page ---------------
     rects = [m.group(0) for m in re.finditer(r'<Rectangle\b[^>]*>.*?</Rectangle>', bt, re.S)
@@ -225,12 +231,19 @@ def main():
         raise SystemExit("no number-frame story to use as a template")
 
     # --- generate ------------------------------------------------------------
-    new_rects, new_frames, new_stories = [], [], []
-    for side in ("L", "R"):
-        x0, x1 = tpl[side]["xspan"]
-        for i in range(n):
-            new_rects.append(rect_xml(tpl[side]["rect_open"], x0, x1,
-                                      Y0 + i * pitch, Y0 + (i + 1) * pitch, fills[i]))
+    tpl_story_self = re.search(r'<Story\b[^>]*Self="([^"]+)"', story_tpl).group(1)
+
+    def emit_slot(i):
+        """Slot i's tab + number on both pages: (rects, frames, [(sid, story_xml)]).
+
+        One code path for the strip and for a chapter master, so a chapter's tab is
+        by construction identical to the strip slot it corresponds to.
+        """
+        rects, frames, stories = [], [], []
+        for side in ("L", "R"):
+            x0, x1 = tpl[side]["xspan"]
+            rects.append(rect_xml(tpl[side]["rect_open"], x0, x1,
+                                  Y0 + i * pitch, Y0 + (i + 1) * pitch, fills[i]))
             sid = mint()
             blk = re.sub(r'(\bSelf=")[^"]*(")', rf'\g<1>{mint()}\g<2>', tpl[side]["frame"], count=1)
             blk = re.sub(r'(\bParentStory=")[^"]*(")', rf'\g<1>{sid}\g<2>', blk, count=1)
@@ -238,21 +251,30 @@ def main():
             it[5] = round(ty0 + i * pitch, 6)
             blk = re.sub(r'ItemTransform="[^"]*"',
                          'ItemTransform="%s"' % " ".join(str(v) for v in it), blk, count=1)
-            new_frames.append(blk)
-            sx = re.sub(r'(<XmlStory|<Story)\b([^>]*?)\bSelf="[^"]*"',
-                        rf'\g<1>\g<2>Self="{sid}"', story_tpl, count=1)
-            sx = re.sub(r'"' + re.escape(re.search(r'<Story\b[^>]*Self="([^"]+)"',
-                        story_tpl).group(1)) + r'"', f'"{sid}"', sx)
-            sx = set_digit(sx, str(i + 1))
-            new_stories.append((sid, sx))
+            frames.append(blk)
+            sx = re.sub(r'"' + re.escape(tpl_story_self) + r'"', f'"{sid}"', story_tpl)
+            stories.append((sid, set_digit(sx, str(i + 1))))
+        return rects, frames, stories
+
+    new_rects, new_frames, new_stories = [], [], []
+    for i in range(n):
+        r, f, s = emit_slot(i)
+        new_rects += r
+        new_frames += f
+        new_stories += s
 
     if args.dry_run:
-        print(f"N={n} pitch={pitch:.4f} scale={scale:.4f} stops={os.path.basename(stops_path)}")
-        print(f"would write {len(new_rects)} tab rects, {len(new_frames)} number frames, "
-              f"{len(new_stories)} stories, {len(inks)} mixed inks "
-              f"({n - len(inks)} pure)")
-        print(f"retiring {len(rects)} rects, {len(numframes)} frames, "
-              f"{len(old_story_ids)} stories")
+        cm = sorted(chapter_masters)
+        print(f"N={n} pitch={pitch:.4f} scale={scale:.4f} "
+              f"stops={os.path.basename(stops_path)}")
+        print(f"strip: would write {len(new_rects)} tab rects, {len(new_frames)} number "
+              f"frames, {len(new_stories)} stories, {len(inks)} mixed inks "
+              f"({n - len(inks)} pure); retiring {len(rects)} rects, "
+              f"{len(numframes)} frames, {len(old_story_ids)} stories")
+        if cm:
+            print(f"chapter masters: {len([k for k in cm if k <= n])} would be kept and "
+                  f"regenerated, {len([k for k in cm if k > n])} dropped "
+                  f"(S1..S{max(cm)} present)")
         return 0
 
     # --- splice BaseTabs -----------------------------------------------------
@@ -264,6 +286,38 @@ def main():
     bt = bt.replace("</MasterSpread>", body + "</MasterSpread>", 1)
     open(bt_path, "w", encoding="utf-8").write(bt)
 
+    # --- reconcile existing chapter masters to N (was make_18ch.py) ----------
+    # Chapters past N go; those that remain get slot k-1's tab and number
+    # regenerated on both pages from the same emit_slot() the strip uses, are
+    # re-based off the full-strip BaseTabs onto tab-less Base so only their own
+    # tab shows, and have the now-moot override list cleared.
+    dropped_masters, kept_masters = [], 0
+    for k in sorted(chapter_masters):
+        path, t = chapter_masters[k]
+        self_id = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1)
+        # retire this master's stories either way -- a dropped master orphans them,
+        # a kept one has its tab and number regenerated
+        old_story_ids |= set(re.findall(r'ParentStory="([^"]+)"', t))
+        if k > n:
+            os.remove(path)
+            dropped_masters.append(self_id)
+            continue
+        t = re.sub(r'<Rectangle\b[^>]*>.*?</Rectangle>',
+                   lambda m: "" if re.search(TABFILL, m.group(0)) else m.group(0), t, flags=re.S)
+        t = re.sub(r'<TextFrame\b[^>]*>.*?</TextFrame>', "", t, flags=re.S)
+        if base_self:
+            t = re.sub(r'AppliedMaster="[^"]*"', f'AppliedMaster="{base_self}"', t)
+        t = re.sub(r'OverrideList="[^"]*"', 'OverrideList=""', t)
+        rects, frames, stories = emit_slot(k - 1)
+        t = t.replace("</MasterSpread>",
+                      "\n\t\t" + "\n\t\t".join(rects + frames) + "\n\t</MasterSpread>", 1)
+        open(path, "w", encoding="utf-8").write(t)
+        new_stories += stories
+        kept_masters += 1
+
+    # Retire and write only now that BOTH passes have declared what they retire --
+    # doing it before the chapter-master pass left its old stories on disk but
+    # unregistered in designmap.
     for sid in old_story_ids:
         p = os.path.join(build, "Stories", f"Story_{sid}.xml")
         if os.path.exists(p):
@@ -271,6 +325,19 @@ def main():
     for sid, sx in new_stories:
         open(os.path.join(build, "Stories", f"Story_{sid}.xml"), "w",
              encoding="utf-8").write(sx)
+
+    # a page pointing at a master we just deleted would dangle
+    repointed = 0
+    if dropped_masters and base_self:
+        for sp in glob.glob(os.path.join(build, "Spreads", "*.xml")):
+            sx = open(sp, encoding="utf-8").read()
+            new = sx
+            for dead in dropped_masters:
+                new = new.replace(f'AppliedMaster="{dead}"', f'AppliedMaster="{base_self}"')
+            if new != sx:
+                repointed += new.count(f'AppliedMaster="{base_self}"') - \
+                             sx.count(f'AppliedMaster="{base_self}"')
+                open(sp, "w", encoding="utf-8").write(new)
 
     # --- Graphic.xml: swap the tab swatches ---------------------------------
     gp = os.path.join(build, "Resources", "Graphic.xml")
@@ -286,6 +353,9 @@ def main():
     d = re.sub(r'[ \t]*<ColorGroupSwatch\b[^>]*SwatchItemRef="MixedInk/tab_\d+"[^>]*/>\s*\n?', "", d)
     if cgs:
         d = re.sub(r'(</ColorGroup>)', "\n".join(cgs) + r'\n\t\1', d, count=1)
+    for dead in dropped_masters:
+        d = re.sub(r'[ \t]*<idPkg:MasterSpread\b[^>]*src="MasterSpreads/MasterSpread_%s\.xml"'
+                   r'[^>]*/>\s*\n?' % re.escape(dead), "", d)
     for sid in old_story_ids:
         d = re.sub(r'[ \t]*<idPkg:Story\b[^>]*src="Stories/Story_%s\.xml"[^>]*/>\s*\n?'
                    % re.escape(sid), "", d)
@@ -300,9 +370,19 @@ def main():
                d, count=1)
     open(dp, "w", encoding="utf-8").write(d)
 
-    print(f"N={n} pitch={pitch:.4f} (was {PITCH26}) | {len(new_rects)} tab rects, "
+    print(f"N={n} pitch={pitch:.4f} | strip: {len(new_rects)} tab rects, "
           f"{len(new_frames)} numbered frames, {len(inks)} mixed inks + "
           f"{n - len(inks)} pure | stops: {os.path.basename(stops_path)}")
+    if chapter_masters:
+        print(f"chapter masters: {kept_masters} kept and regenerated, "
+              f"{len(dropped_masters)} dropped"
+              + (f", {repointed} page(s) repointed to Base" if repointed else ""))
+        # keep/drop is all we can do here -- minting a new chapter master needs a
+        # chapter title, which only the content has (that is apply_tabs.py's job)
+        if kept_masters < n:
+            print(f"NOTE: the strip has {n} slots but only {kept_masters} chapter "
+                  f"master(s) exist, so slots {kept_masters + 1}..{n} have no master. "
+                  f"Run apply_tabs.py on a document with {n} chapters to mint them.")
     return 0
 
 

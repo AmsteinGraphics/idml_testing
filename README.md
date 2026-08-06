@@ -59,7 +59,6 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 | `prune_swatches.py` | InDesign-style "delete unused swatches"; protects structural swatches + the sanctioned palette, cascades to a fixed point | `prune_swatches.py template_build [--dry-run]` |
 | `prune_styles.py` | report/remove styles dead in the **full manual** (not the empty template) with closure over every style-reference edge | `prune_styles.py template_build --ref extracted --dry-run` |
 | `bake_masters.py` | recolour every tab in every tab master from the placed `.ai` to native mixed-ink swatches, preserving geometry, bleed and master filiation | `bake_masters.py template_build template_build_masters` |
-| `make_18ch.py` | derive an 18-chapter template: prune masters, respace + recolour tabs, mirror tab+number onto both pages, write digits 1–18 | `make_18ch.py` |
 | `bake_tab_strip.py`, `tab_strip.py` | earlier tab-strip proof and compute-only ink table — superseded by `bake_masters.py` | — |
 
 ### Producing a manual
@@ -68,7 +67,7 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 |---|---|---|
 | `fix_numbering.py` | join `titles:lvl2`/`lvl3` to the `dm32_list` numbered list so multi-level section numbering counts up | `fix_numbering.py <dir>` |
 | `sectionize.py` | detect chapters (`titles:lvl2` headings), locate each one's first page geometrically, write one `<Section>` per chapter | `sectionize.py <dir> [--dry-run]` |
-| `configure_chapters.py` | rebuild the thumb-tab strip for N chapters — **any N**, defaulting to the number detected in the document | `configure_chapters.py <dir> [--n N]` |
+| `configure_chapters.py` | rebuild the thumb-tab strip for N chapters — **any N**, defaulting to the number detected in the document; also reconciles any existing chapter masters to N | `configure_chapters.py <dir> [--n N]` |
 | `apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
 | `build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
 | `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
@@ -97,7 +96,8 @@ python3 repack.py template_build manual_template.idml            # canonical bla
 python3 bake_masters.py template_build template_build_masters    # native tabs, .ai gone
 python3 repack.py template_build_masters manual_template_masters_proof.idml
 
-python3 make_18ch.py                                             # -> manual_template_tab18_proof.idml
+python3 configure_chapters.py template_build_18 --n 18 \
+        --tabstops template_build.tabstops.csv                   # any N, masters reconciled
 
 python3 validate_idml.py template_build_masters                  # validate any build dir
 ```
@@ -247,14 +247,14 @@ inert and stripped by default.
 
 ## The chapter count is the manual's, not the toolchain's
 
-26 (v1.76) and 18 (`make_18ch.py`) were instances, never the rule — the next manual has
+26 (v1.76) and 18 were instances, never the rule — the next manual has
 whatever chapter count its content has. `configure_chapters.py` makes that the operating
 assumption: it defaults N to the chapters actually detected in the document and rebuilds
 the strip for it, and `apply_tabs.py` **reads** N, pitch and the number origin from the
 strip rather than assuming them.
 
-The strip is *generated* from templates, not pruned from a fixed grid — `make_18ch.py`
-could only shrink 26 down, never grow past it. One tab rectangle and one number frame per
+The strip is *generated* from templates, not pruned from a fixed grid — the old
+the retired `make_18ch.py` could only shrink 26 down, never grow past it. One tab rectangle and one number frame per
 page act as templates; N of each are emitted at `pitch = box_height / N`, each number
 frame gets its own story carrying digit 1…N, and the ink ramp from
 `<build>.tabstops.csv` is re-tweened across the new N (a stop landing on a single ink is
@@ -296,7 +296,7 @@ Geometry worth knowing (points, spread coordinates):
 
 In the original file each chapter master inherited the full strip from `BaseTabs` and
 hid it with per-master overrides — a workaround for an InDesign bug where inherited tabs
-wouldn't render. Native tabs *do* render, so `make_18ch.py` re-bases each chapter master
+wouldn't render. Native tabs *do* render, so `configure_chapters.py` re-bases each chapter master
 onto `Base` and clears its override list: each master then owns exactly one tab and one
 number, mirrored onto both pages of the facing spread.
 
@@ -357,8 +357,5 @@ Open:
   references the `.ai`.
 - The mirrored right-page tab number reuses the right-aligned `foot_and_tabs:tab_right`
   style; a left-aligned variant may look better.
-- `make_18ch.py` is now redundant with `configure_chapters.py` for the strip, but still
-  does the chapter-master pruning and re-basing a 26-chapter *template* needs. Worth
-  folding together.
 - `configure_chapters.py` rebuilds the strip but doesn't rename anything from a
   chapter-title manifest; titles still come from the detected `titles:lvl2` headings.
