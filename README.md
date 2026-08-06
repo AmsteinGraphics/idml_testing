@@ -21,30 +21,42 @@ Everything is plain `python3` with the standard library only. No InDesign and no
 
 ## Layout
 
-| | |
-|---|---|
-| `dm32_print_manual_v1.76.idml` | the shipped manual (source of truth) |
-| `dm32_print_manual_v1.76_fixed.idml` | same, with 2 broken oblique links repaired (dest keys 208, 119) |
-| `manual_template.idml` | canonical blank-kit template, 26 chapters — tabs still use the external `.ai` |
-| `manual_template_masters_proof.idml` | 26-ch, native mixed-ink tabs, `.ai` dependency removed |
-| `manual_template_tab18_proof.idml` | 18-ch build, numbered tabs on both pages |
-| **`manual_template_nosection.idml`** | **the kit the forward pipeline runs on** — 7 masters, native tabs, no chapter masters |
-| `manual_template_example_mixed_ink.idml` | InDesign-authored mixed-ink swatch sample (schema reference) |
-| `*.py` | the toolchain, see below |
-| `template_build.swatches`, `template_build.tabstops.csv` | per-project config (see *Conventions*) |
-| `missing_underline_verified.csv`, `pairing_anomalies.csv` | cross-reference audit output |
-| `tab_gradient_v2.00.svg` | export of the original tab artwork, used to decode the gradient |
+The repo separates what stays put from what changes per manual:
 
-Unpacked working trees (`extracted/`, `template_build*/`) are **not tracked** — they are
-build products of the archives above. Recreate the input tree with:
-
-```bash
-python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml').extractall('extracted')"
+```
+toolchain/          the tools — one source of truth, shared by every manual
+kit/
+  manual_kit.idml           the house blank: styles, masters, colours, tags,
+                            cross-reference + index engines. 7 masters, native
+                            mixed-ink tabs, no chapter masters, no content.
+  manual_kit.swatches       default palette
+  manual_kit.tabstops.csv   default tab-strip ink ramp
+  reference/                InDesign-authored samples kept for their schema
+  derivation/               how the kit was cut from the DM32 manual (provenance)
+manuals/
+  dm32/
+    dm32_print_manual_v1.76.idml       the shipped manual (source of truth)
+    dm32_print_manual_v1.76_fixed.idml same, 2 broken oblique links repaired
+    dm32.swatches  dm32.tabstops.csv   this manual's config
+    submissions/                       content poured into the kit, from InDesign
+    audit/                             cross-reference audit output
+    build/                             working tree (not tracked)
 ```
 
-> The `extracted/` tree used during development corresponds to the **`_fixed`** archive,
-> not the pristine original — they differ only in `designmap.xml`. Unpack
-> `dm32_print_manual_v1.76.idml` instead if you want the untouched original.
+**The kit and the toolchain are the standard; a manual is an instance of it.** That is
+why there is one repo rather than one per manual: a copied toolchain drifts, and the
+copy that keeps a fixed bug is the one you find out about last. If you later need
+manuals in separate repos, `toolchain/` + `kit/` split off as their own and each manual
+pins a version — the directory boundary is already the right seam.
+
+Working trees are build products and are not tracked. Recreate one with:
+
+```bash
+python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION.idml').extractall('manuals/dm32/build')"
+```
+
+> The `extracted/` tree used when the kit was derived corresponds to the **`_fixed`**
+> archive, not the pristine original — they differ only in `designmap.xml`.
 
 ---
 
@@ -54,79 +66,81 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 
 | script | what it does | run |
 |---|---|---|
-| `make_template.py` | strip content → blank kit: all styles / masters / colours / tags kept, one blank donor spread, 114 master-referenced stories | `make_template.py extracted template_build` |
-| `scrub_metadata.py` | reset XMP — drop History/Ingredients/Manifest/thumbnails/DerivedFrom, fresh UUID lineage so derived manuals aren't fingerprinted as the source | `scrub_metadata.py template_build/META-INF/metadata.xml` |
-| `prune_swatches.py` | InDesign-style "delete unused swatches"; protects structural swatches + the sanctioned palette, cascades to a fixed point | `prune_swatches.py template_build [--dry-run]` |
-| `prune_styles.py` | report/remove styles dead in the **full manual** (not the empty template) with closure over every style-reference edge | `prune_styles.py template_build --ref extracted --dry-run` |
-| `bake_masters.py` | recolour every tab in every tab master from the placed `.ai` to native mixed-ink swatches, preserving geometry, bleed and master filiation | `bake_masters.py template_build template_build_masters` |
+| `toolchain/make_template.py` | strip content → blank kit: all styles / masters / colours / tags kept, one blank donor spread, 114 master-referenced stories | `make_template.py extracted template_build` |
+| `toolchain/scrub_metadata.py` | reset XMP — drop History/Ingredients/Manifest/thumbnails/DerivedFrom, fresh UUID lineage so derived manuals aren't fingerprinted as the source | `scrub_metadata.py template_build/META-INF/metadata.xml` |
+| `toolchain/prune_swatches.py` | InDesign-style "delete unused swatches"; protects structural swatches + the sanctioned palette, cascades to a fixed point | `prune_swatches.py template_build [--dry-run]` |
+| `toolchain/prune_styles.py` | report/remove styles dead in the **full manual** (not the empty template) with closure over every style-reference edge | `prune_styles.py template_build --ref extracted --dry-run` |
+| `toolchain/bake_masters.py` | recolour every tab in every tab master from the placed `.ai` to native mixed-ink swatches, preserving geometry, bleed and master filiation | `bake_masters.py template_build template_build_masters` |
 | `bake_tab_strip.py`, `tab_strip.py` | earlier tab-strip proof and compute-only ink table — superseded by `bake_masters.py` | — |
 
 ### Producing a manual
 
 | script | what it does | run |
 |---|---|---|
-| `fix_numbering.py` | join `titles:lvl2`/`lvl3` to the `dm32_list` numbered list so multi-level section numbering counts up | `fix_numbering.py <dir>` |
-| `sectionize.py` | detect chapters (`titles:lvl2` headings), locate each one's first page geometrically, write one `<Section>` per chapter | `sectionize.py <dir> [--dry-run]` |
-| `configure_chapters.py` | rebuild the thumb-tab strip for N chapters — **any N**, defaulting to the number detected in the document; also reconciles any existing chapter masters to N | `configure_chapters.py <dir> [--n N]` |
-| `apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
-| `build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
+| `toolchain/fix_numbering.py` | join `titles:lvl2`/`lvl3` to the `manual_list` numbered list so multi-level section numbering counts up | `fix_numbering.py <dir>` |
+| `toolchain/sectionize.py` | detect chapters (`titles:lvl2` headings), locate each one's first page geometrically, write one `<Section>` per chapter | `sectionize.py <dir> [--dry-run]` |
+| `toolchain/configure_chapters.py` | rebuild the thumb-tab strip for N chapters — **any N**, defaulting to the number detected in the document; also reconciles any existing chapter masters to N | `configure_chapters.py <dir> [--n N]` |
+| `toolchain/apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
+| `toolchain/build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
 | `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
-| `strip_xref_boxes.py` | inverse of `build_xref_boxes.py` — remove all margin boxes to manufacture a boxless submission | `strip_xref_boxes.py <dir> [--dry-run]` |
+| `toolchain/strip_xref_boxes.py` | inverse of `build_xref_boxes.py` — remove all margin boxes to manufacture a boxless submission | `strip_xref_boxes.py <dir> [--dry-run]` |
 
 ### Shared
 
 | script | what it does | run |
 |---|---|---|
-| `fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
-| `fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
-| `validate_idml.py` | referential-integrity check + swatch-whitelist + underline enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
-| `repack.py` | folder → valid IDML (`mimetype` first and stored, rest deflated) | `repack.py <dir> <out.idml>` |
-| `resolve_xref.py` | cross-reference resolver / auditor | `resolve_xref.py --audit` |
+| `toolchain/standardize_kit.py` | strip a product prefix off the kit's shared design-system objects (`dm32_list` -> `manual_list`, …) | `standardize_kit.py <dir> [--from P] [--to Q]` |
+| `toolchain/fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
+| `toolchain/fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
+| `toolchain/validate_idml.py` | referential-integrity check + swatch-whitelist + underline enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
+| `toolchain/repack.py` | folder → valid IDML (`mimetype` first and stored, rest deflated) | `repack.py <dir> <out.idml>` |
+| `toolchain/resolve_xref.py` | cross-reference resolver / auditor | `resolve_xref.py --audit` |
 
 ### Template build pipeline
 
 From a freshly unpacked `extracted/`:
 
 ```bash
-python3 make_template.py extracted template_build
-python3 scrub_metadata.py template_build/META-INF/metadata.xml   # 1.9 MB -> 83 KB
-python3 prune_swatches.py template_build                         # drops Cyan/Magenta/Yellow
-python3 repack.py template_build manual_template.idml            # canonical blank kit (tabs via .ai)
+python3 toolchain/make_template.py extracted template_build
+python3 toolchain/scrub_metadata.py template_build/META-INF/metadata.xml   # 1.9 MB -> 83 KB
+python3 toolchain/prune_swatches.py template_build                         # drops Cyan/Magenta/Yellow
+python3 toolchain/repack.py template_build manual_template.idml            # canonical blank kit (tabs via .ai)
 
-python3 bake_masters.py template_build template_build_masters    # native tabs, .ai gone
-python3 repack.py template_build_masters manual_template_masters_proof.idml
+python3 toolchain/bake_masters.py template_build template_build_masters    # native tabs, .ai gone
+python3 toolchain/repack.py template_build_masters manual_template_masters_proof.idml
 
-python3 configure_chapters.py template_build_18 --n 18 \
+python3 toolchain/configure_chapters.py template_build_18 --n 18 \
         --tabstops template_build.tabstops.csv                   # any N, masters reconciled
 
-python3 validate_idml.py template_build_masters                  # validate any build dir
+python3 toolchain/validate_idml.py template_build_masters                  # validate any build dir
 ```
 
 ### Forward content production
 
-The kit is **`manual_template_nosection.idml`** — 7 masters, native mixed-ink tabs, no
-`.ai`, no chapter masters (`apply_tabs.py` generates those per chapter). A submission is
-that kit with content poured in: it arrives with underlined trigger words already wired to
+The kit is **`kit/manual_kit.idml`** — 7 masters, native mixed-ink tabs, no `.ai`, no
+chapter masters (`apply_tabs.py` generates those per chapter). A submission is that kit
+with content poured in: it arrives with underlined trigger words already wired to
 destination anchors, but no margin boxes, no sections, no tabs, and usually only
 `titles:lvl4` joined to the numbered list.
 
 ```bash
-python3 -c "import zipfile; zipfile.ZipFile('submission.idml').extractall('build')"
+B=manuals/dm32/build
+python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUB.idml').extractall('$B')"
 
-python3 fix_numbering.py      build  # lvl2/lvl3 -> dm32_list, so numbering counts up
-python3 sectionize.py         build  # one <Section> per titles:lvl2 chapter
-python3 configure_chapters.py build  # rebuild the tab strip for THIS manual's N
-python3 apply_tabs.py         build  # S<k> master per chapter, applied to its pages
-python3 build_xref_boxes.py build --jsx   # suppress + log dead links, defer the boxes
-python3 validate_idml.py  build
-python3 repack.py         build out.idml
+python3 toolchain/fix_numbering.py      $B   # lvl2/lvl3 -> manual_list, so numbering counts up
+python3 toolchain/sectionize.py         $B   # one <Section> per titles:lvl2 chapter
+python3 toolchain/configure_chapters.py $B   # rebuild the tab strip for THIS manual's N
+python3 toolchain/apply_tabs.py         $B   # S<k> master per chapter, applied to its pages
+python3 toolchain/build_xref_boxes.py   $B --jsx   # suppress + log dead links, defer the boxes
+python3 toolchain/validate_idml.py      $B
+python3 toolchain/repack.py             $B out.idml
 
 # then, in InDesign:
 #   open out.idml, run place_xref_boxes.jsx, export IDML
-python3 -c "import zipfile; zipfile.ZipFile('out_processed.idml').extractall('build2')"
-python3 fix_underlines.py build2     # InDesign reintroduces local underline overrides
-python3 validate_idml.py  build2
-python3 repack.py         build2 final.idml
+python3 -c "import zipfile; zipfile.ZipFile('out_processed.idml').extractall('$B')"
+python3 toolchain/fix_underlines.py     $B   # InDesign reintroduces local underline overrides
+python3 toolchain/validate_idml.py      $B
+python3 toolchain/repack.py             $B final.idml
 ```
 
 Order matters: `fix_numbering` must run before `sectionize` (section markers come from
@@ -159,10 +173,10 @@ For the 3-chapter test submission: 26 boxes built, 30 dead links suppressed.
 ### Auditing cross-references
 
 ```bash
-python3 resolve_xref.py --audit                  # summary of links, breaks, orphans
-python3 resolve_xref.py --report --csv out.csv   # full pairing dump
-python3 resolve_xref.py --from "underlined phrase"
-python3 resolve_xref.py --to   "target heading"
+python3 toolchain/resolve_xref.py --audit                  # summary of links, breaks, orphans
+python3 toolchain/resolve_xref.py --report --csv out.csv   # full pairing dump
+python3 toolchain/resolve_xref.py --from "underlined phrase"
+python3 toolchain/resolve_xref.py --to   "target heading"
 ```
 
 Baseline for v1.76: 190 complete oblique links, 3 broken, 20 orphan destinations,
@@ -171,22 +185,53 @@ cross-checked and are **not** defects — see `missing_underline_verified.csv`.
 
 ---
 
+## Starting a new manual
+
+The kit and toolchain are already product-neutral, so a new manual is a directory and
+two config files:
+
+```bash
+mkdir -p manuals/dm42n/submissions
+cp kit/manual_kit.swatches      manuals/dm42n/dm42n.swatches       # edit if the palette differs
+cp kit/manual_kit.tabstops.csv  manuals/dm42n/dm42n.tabstops.csv   # edit if the ramp differs
+```
+
+Pour content into `kit/manual_kit.idml` in InDesign, export IDML to
+`manuals/dm42n/submissions/`, then run the forward pipeline against
+`manuals/dm42n/build`. Config is found by walking up from the build directory, so
+nothing needs to be passed on the command line.
+
+The chapter count is **not** configuration — `configure_chapters.py` takes it from the
+content. Neither is the palette hardcoded: the `tabstops.csv` header names the inks and
+they are resolved against the document's own `Graphic.xml`, so a manual using different
+spots only needs a different header. What is *not* yet parametric is page geometry —
+`PAGE_H` / `M_TOP` / `M_BOT` are constants, fine while every manual is this A5 trim.
+
+**Migrating an existing document** built before standardisation: run
+`standardize_kit.py` on its unpacked tree first. It renames the design-system objects it
+finds and leaves content alone — `dm32_online_manual` is a URL, not a style, and stays.
+
 ## Conventions
 
 Per-manual configuration lives **next to** a build directory (never inside it, so it
 never gets packed into the `.idml`):
 
-- **`<build>.swatches`** — the sanctioned palette, one swatch name per line, `#` comments.
-  `validate_idml.py` flags any colour applied to a page item whose swatch isn't listed;
-  `prune_swatches.py` keeps listed swatches even when currently unused. The file is
-  auto-discovered as `<dir>.swatches`, so derived build dirs need either their own copy
-  or an explicit `--swatches template_build.swatches` (otherwise the colour check is
-  silently skipped).
+Discovery walks outward, most specific first: `<build>.swatches`, then any `*.swatches`
+in the build's parent (`manuals/<product>/<product>.swatches`), then the kit's default.
+So a manual directory carries its own config and nothing needs passing on the command
+line; `--swatches` / `--tabstops` still override.
+
+- **`<product>.swatches`** — the sanctioned palette, one swatch name per line, `#`
+  comments. `validate_idml.py` flags any colour applied to a page item whose swatch
+  isn't listed, and treats a mixed ink built only from listed inks as listed;
+  `prune_swatches.py` keeps listed swatches even when currently unused.
   The DM32 palette is Black + `PANTONE 292 U`, `PANTONE 130 U`, `PANTONE Warm Gray 1 U`.
-- **`<build>.tabstops.csv`** — header `Black,292,130,Warm Gray 1`, then one row per
-  gradient stop giving each ink's percentage. Stops are evenly spaced along the tab
-  strip and the N tabs are tweened per-channel between them. DM32 uses four pure stops:
-  292 → Warm Gray 1 → 130 → Black.
+- **`<product>.tabstops.csv`** — the header **names the inks** and is resolved against
+  the document's own `Graphic.xml`; a column may name an ink in full (`PANTONE 292 U`)
+  or short (`292`, `Black`). Each row is a gradient stop giving each ink's percentage.
+  Stops are evenly spaced along the strip and the N tabs are tweened between them, with
+  a mixed ink's components ordered by the document's `TrapOrder`. DM32 uses four pure
+  stops: 292 → Warm Gray 1 → 130 → Black.
 
 ## Underlines are style-driven, always
 
@@ -343,7 +388,9 @@ Collected the hard way; all of these will silently produce a file InDesign rejec
 
 ## Status
 
-Done: broken-link repair · blank-kit template (opens in InDesign) · metadata scrub ·
+Done: repo split into toolchain / kit / manuals · design-system objects renamed off the
+product (`dm32_*` -> `manual_*`) and the kit's XMP scrubbed · tab palette driven by the
+tabstops header instead of hardcoded inks · broken-link repair · blank-kit template (opens in InDesign) · metadata scrub ·
 swatch prune · style analysis · native mixed-ink tabs with the `.ai` fully removed ·
 forward content pipeline (sections, tabs, oblique-ref boxes via JSX) · tab strip repaired
 to 52/52 across all templates · style-driven underline enforcement · **InDesign 2026 crash
@@ -359,3 +406,8 @@ Open:
   style; a left-aligned variant may look better.
 - `configure_chapters.py` rebuilds the strip but doesn't rename anything from a
   chapter-title manifest; titles still come from the detected `titles:lvl2` headings.
+- Page geometry (`PAGE_H` / `M_TOP` / `M_BOT`) is still constant in `apply_tabs.py` and
+  `configure_chapters.py`. Fine while every manual shares this A5 trim; a different trim
+  would need it read from the document's `MarginPreference`.
+- `kit/derivation/` keeps the three intermediate templates the kit was cut from. They are
+  provenance, not inputs — nothing in the pipeline reads them.

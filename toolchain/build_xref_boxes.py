@@ -3,12 +3,12 @@
 
 A submission carries underlined trigger words (CharacterStyle/link[_slant] with a
 HyperlinkTextSource) already wired by a <Hyperlink> to a destination anchor, but
-NO margin boxes, and the section headings carry LIVE dm32_list auto-numbering
+NO margin boxes, and the section headings carry LIVE manual_list auto-numbering
 (titles:lvl2/3/4). For every underlined word this does one of two things:
 
   RESOLVABLE (destination is a named anchor present in the document) -> build the
   margin box: a margin story (cross_ref_par / code_styles:cross_ref /
-  CrossReferenceSource, format dm32_cross_ref, cached Content = the target's
+  CrossReferenceSource, format manual_cross_ref, cached Content = the target's
   computed section number), an anchored <TextFrame
   AppliedObjectStyle="ObjectStyle/cross_ref_block"> inserted as its own character
   range immediately before the word's range, a <Hyperlink> binding the new source
@@ -60,9 +60,29 @@ POST20_FRAME_ATTRS = ["BeforeGroupingLayerPosition", "FlexItemHeightMode", "Flex
                       "Locked", "OverprintFill", "OverprintGap", "OverprintStroke"]
 
 
-def load_templates():
+def resolve_format(build, name):
+    """CrossReferenceFormat Self for `name`, in THIS document.
+
+    The templates were lifted from v1.76, where the format's Self is u6bcb; in the
+    kit the same format is u198b. A format is referenced by Self, so shipping the
+    literal id wrote a dangling AppliedFormat into any other document. The Name is
+    the stable handle, so bind it at run time.
+    """
+    d = open(os.path.join(build, "designmap.xml"), encoding="utf-8").read()
+    for m in re.finditer(r'<CrossReferenceFormat\b([^>]*?)/?>', d):
+        nm = re.search(r'\bName="([^"]*)"', m.group(1))
+        sf = re.search(r'\bSelf="([^"]*)"', m.group(1))
+        if nm and sf and nm.group(1) == name:
+            return sf.group(1)
+    raise SystemExit(f"cross-reference format {name!r} not found in {build}/designmap.xml")
+
+
+def load_templates(build=None, fmt_name="manual_cross_ref"):
     frame = open(f"{HERE}/xref_templates/box_frame.xml", encoding="utf-8").read()
     story = open(f"{HERE}/xref_templates/margin_story.xml", encoding="utf-8").read()
+    if build:
+        story = re.sub(r'AppliedFormat="[^"]*"',
+                       'AppliedFormat="%s"' % resolve_format(build, fmt_name), story)
     return dict(
         frame=frame, story=story,
         frame_self=re.search(r'<TextFrame Self="([^"]+)"', frame).group(1),
@@ -149,6 +169,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--log", default=None, help="CSV audit log path (default <build>.xref_log.csv)")
     ap.add_argument("--keep-dead", action="store_true", help="do not suppress dead links (still logged)")
+    ap.add_argument("--format", default="manual_cross_ref",
+                    help="CrossReferenceFormat name to bind margin boxes to; resolved to "
+                         "this document's Self id at run time")
     ap.add_argument("--static", action="store_true",
                     help="put the section number in the box as plain text instead of a live "
                          "cross-reference (reliable for print; no auto-update)")
@@ -160,7 +183,7 @@ def main():
     build = args.build.rstrip("/\\")
     log_path = args.log or (build + ".xref_log.csv")
 
-    tmpl = load_templates()
+    tmpl = load_templates(build, args.format)
     ix = R.load(build)
     key_to_number = compute_section_numbers(build)
 

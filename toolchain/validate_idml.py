@@ -133,9 +133,21 @@ for f in layout:
 check(not bad_thread, f"text-frame thread -> missing frame: {sorted(bad_thread)[:5]}")
 
 # ---- 9. swatch whitelist: no off-palette color applied to page items -------
-wl_path = _WL or (lambda p: p if os.path.exists(p) else None)(
-    os.path.join(os.path.dirname(D.rstrip("/")) or ".",
-                 os.path.basename(D.rstrip("/")) + ".swatches"))
+# Per-manual config sits next to the build dir, so with the repo split into
+# toolchain / kit / manuals a build at manuals/<product>/build finds its whitelist
+# one level up as manuals/<product>/<product>.swatches. The kit's own file is the
+# last resort, which is where a new manual starts.
+def _find_swatches(d):
+    b = d.rstrip("/")
+    parent = os.path.dirname(b) or "."
+    here = os.path.dirname(os.path.abspath(__file__))
+    for p in [b + ".swatches"] + sorted(glob.glob(os.path.join(parent, "*.swatches"))) + \
+             [os.path.join(here, "..", "kit", "manual_kit.swatches")]:
+        if os.path.exists(p):
+            return p
+    return None
+
+wl_path = _WL or _find_swatches(D)
 wl_report = "no whitelist -> color check skipped"
 if wl_path and os.path.exists(wl_path):
     allow = set()

@@ -1,9 +1,9 @@
-/*  place_xref_boxes.jsx  —  DM32 oblique-ref margin boxes
+/*  place_xref_boxes.jsx  —  oblique-ref margin boxes
  *
  *  Run in InDesign on a manual produced by the toolchain (sections + tabs
  *  applied, dead cross-references already suppressed). For every underlined
  *  oblique-ref word it creates a native anchored margin box holding a LIVE
- *  cross-reference (format dm32_cross_ref) to that word's target.
+ *  cross-reference (format manual_cross_ref) to that word's target.
  *
  *  REBUILD: re-running removes every existing margin box first, then recreates
  *  the whole set.
@@ -18,7 +18,7 @@
     if (app.documents.length === 0) { alert("Open the manual document first."); return; }
     var doc = app.activeDocument;
 
-    var FORMAT = "dm32_cross_ref", OBJSTYLE = "cross_ref_block",
+    var FORMAT = "manual_cross_ref", OBJSTYLE = "cross_ref_block",
         PARA = "cross_ref_par", CHAR = "link";
     var WIDTH_MM = 10.00, HEIGHT_MM = 3.64;      // requested box size
 

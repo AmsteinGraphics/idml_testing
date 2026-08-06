@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Ensure the section-heading paragraph styles are joined to the dm32_list list.
+"""Ensure the section-heading paragraph styles are joined to the manual_list list.
 
 The multi-level section numbering only works if EVERY level's paragraph style is
 switched on as a numbered list AND points at the shared list. Submissions often
 arrive with only the deepest level (titles:lvl4) wired up, so titles:lvl2/lvl3
 never count (their level-1/level-2 counters stay at 1 and lvl4's ^1.^2.^3
 collapses to 1.1.x). This patches lvl2/lvl3 to match lvl4:
-BulletsAndNumberingListType="NumberedList" + AppliedNumberingList -> dm32_list.
+BulletsAndNumberingListType="NumberedList" + AppliedNumberingList -> manual_list.
 Their NumberingLevel / NumberingExpression are left as-is (already correct).
 
 Idempotent. Run early, before sectionize/apply_tabs/build_xref_boxes.
 
-    fix_numbering.py <build_dir> [--list dm32_list] [--styles titles:lvl2,titles:lvl3]
+    fix_numbering.py <build_dir> [--list manual_list] [--styles titles:lvl2,titles:lvl3]
 """
 import argparse
 import os
@@ -51,7 +51,7 @@ def fix_style(styles_xml, name, list_name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("build")
-    ap.add_argument("--list", default="dm32_list")
+    ap.add_argument("--list", default="manual_list")
     ap.add_argument("--styles", default="titles:lvl2,titles:lvl3")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()

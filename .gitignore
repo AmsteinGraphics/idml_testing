@@ -2,21 +2,17 @@
 __pycache__/
 *.pyc
 
-# Unpacked IDML working trees — reproducible by unzipping the tracked .idml files
+# Unpacked IDML working trees and pipeline outputs — reproducible from the tracked
+# inputs via the toolchain (see README). Git history is the archive for anything
+# that was tracked before; recover with `git show <rev>:<path>`.
+manuals/*/build/
+manuals/*/build*.csv
+manuals/*/*_v[0-9]*.idml
+manuals/*/out*.idml
+
+# legacy top-level working trees (pre-restructure)
 extracted/
 template_build/
 template_build_18/
 template_build_masters/
 template_build_tabproof/
-
-# Forward-pipeline outputs — reproducible from the tracked inputs, see README
-# "Forward content production". Kept because they are NOT reproducible here:
-#   manual_template_test{1,2}.idml + .indd   poured submissions, authored in InDesign
-#   manual_template_test2_jsx_processed.idml an InDesign round-trip (needs InDesign)
-manual_template_test1_*.idml
-manual_template_test2_jsx.idml
-manual_template_test2_static.idml
-manual_template_test2_step*.idml
-manual_template_test2_transplant.idml
-manual_template_test2_xref.idml
-manual_template_test2_parametric.idml

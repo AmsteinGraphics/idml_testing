@@ -43,17 +43,43 @@ PITCH26 = 20.7233                        # the kit's grid, used only as the
 TY0_NUM26 = -264.692                     # reference the templates come from
 TABFILL = r'FillColor="(?:MixedInk/tab_\d+|Color/PANTONE [^"]+|Color/Black)"'
 
-KEYS = ["Black", "292", "130", "Warm Gray 1"]
-TRAP = ["Black", "Warm Gray 1", "130", "292"]
-INK_REF = {"Black": "Ink/$ID/Process Black", "Warm Gray 1": "Ink/PANTONE Warm Gray 1 U",
-           "130": "Ink/PANTONE 130 U", "292": "Ink/PANTONE 292 U"}
-INK_NAME = {"Black": "$ID/Process Black", "Warm Gray 1": "PANTONE Warm Gray 1 U",
-            "130": "PANTONE 130 U", "292": "PANTONE 292 U"}
-COLOR_REF = {"Black": "Color/Black", "Warm Gray 1": "Color/PANTONE Warm Gray 1 U",
-             "130": "Color/PANTONE 130 U", "292": "Color/PANTONE 292 U"}
-COLOR_NAME = {"Black": "Black", "Warm Gray 1": "PANTONE Warm Gray 1 U",
-              "130": "PANTONE 130 U", "292": "PANTONE 292 U"}
 enc = lambda s: s.replace(" ", "%20")
+
+
+def resolve_palette(build, keys):
+    """Bind the tabstops CSV's column names to THIS document's inks and colours.
+
+    The ink identities used to be hardcoded to the DM32 palette while the CSV
+    header naming them was ignored, so a manual with different spots silently got
+    DM32's inks. They are now resolved against Resources/Graphic.xml, and ordered
+    by the document's own TrapOrder -- which is what InDesign lists a mixed ink's
+    components by. A column may name an ink in full ("PANTONE 292 U") or in the
+    short form the DM32 sheet uses ("292", "Black").
+
+    Returns (trap_ordered_keys, {key: {ink_ref, ink_name, color_ref, color_name}}).
+    """
+    g = open(os.path.join(build, "Resources", "Graphic.xml"), encoding="utf-8").read()
+    inks = {}
+    for m in re.finditer(r'<Ink\b([^>]*?)/?>', g):
+        nm = re.search(r'\bName="([^"]*)"', m.group(1))
+        to = re.search(r'\bTrapOrder="(\d+)"', m.group(1))
+        if nm:
+            inks[nm.group(1)] = int(to.group(1)) if to else 9999
+    colors = set(re.findall(r'<Color\b[^>]*\bName="([^"]*)"', g))
+
+    ref = {}
+    for k in keys:
+        ink = next((c for c in (k, f"PANTONE {k} U", f"$ID/Process {k}") if c in inks), None)
+        if ink is None:
+            raise SystemExit(f"tabstops column {k!r} names no ink in this document.\n"
+                             f"inks present: {sorted(inks)}")
+        color = "Black" if ink == "$ID/Process Black" else ink
+        if color not in colors:
+            raise SystemExit(f"ink {ink!r} has no matching Color swatch "
+                             f"(looked for Name={color!r})")
+        ref[k] = dict(ink_ref=f"Ink/{ink}", ink_name=ink,
+                      color_ref=f"Color/{color}", color_name=color, trap=inks[ink])
+    return sorted(keys, key=lambda k: ref[k]["trap"]), ref
 
 
 def set_attr(tag, n, v):
@@ -62,48 +88,74 @@ def set_attr(tag, n, v):
     return tag[:-1] + f' {n}="{v}"' + tag[-1]
 
 
+def find_config(build, suffix, explicit=None):
+    """Yield candidate per-manual config paths, most specific first.
+
+    Per-manual config lives NEXT TO the build directory so it is never packed into
+    the .idml. With the repo split into toolchain / kit / manuals, a build dir is
+    manuals/<product>/build, so the config sits one level up as
+    manuals/<product>/<product><suffix> -- hence the parent-directory search. The
+    kit's own file is the last resort, which is what a brand-new manual starts from.
+    """
+    if explicit:
+        if not os.path.exists(explicit):
+            raise SystemExit(f"config not found: {explicit}")
+        yield explicit
+        return
+    b = build.rstrip("/")
+    parent = os.path.dirname(b) or "."
+    cands = [b + suffix] + sorted(glob.glob(os.path.join(parent, "*" + suffix)))
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands.append(os.path.join(here, "..", "kit", "manual_kit" + suffix))
+    for p in cands:
+        if os.path.exists(p):
+            yield p
+
+
 def load_stops(build, explicit):
-    for p in (explicit, build.rstrip("/") + ".tabstops.csv", "template_build.tabstops.csv"):
-        if p and os.path.exists(p):
-            rows = list(csv.reader(open(p)))
-            return [[float(v) for v in r] for r in rows[1:]], p
-    raise SystemExit("no tabstops CSV found (looked for <build>.tabstops.csv, "
-                     "template_build.tabstops.csv); pass --tabstops FILE")
+    """(stops, column_names, path). The header names the inks; it is not decoration."""
+    for p in find_config(build, ".tabstops.csv", explicit):
+        lines = [ln for ln in open(p)
+                 if ln.strip() and not ln.lstrip().startswith("#")]   # allow comments
+        rows = list(csv.reader(lines))
+        keys = [c.strip() for c in rows[0]]
+        return [[float(v) for v in r] for r in rows[1:]], keys, p
+    raise SystemExit("no tabstops CSV found; pass --tabstops FILE")
 
 
-def tween(stops, p):
+def tween(stops, keys, p):
     n = len(stops) - 1
     seg = min(int(p * n), n - 1)
     p0, p1 = seg / n, (seg + 1) / n
     f = (p - p0) / (p1 - p0) if p1 > p0 else 0
-    return {KEYS[k]: round(stops[seg][k] + f * (stops[seg + 1][k] - stops[seg][k]))
-            for k in range(4)}
+    return {keys[k]: round(stops[seg][k] + f * (stops[seg + 1][k] - stops[seg][k]))
+            for k in range(len(keys))}
 
 
-def build_swatches(stops, n):
+def build_swatches(stops, keys, trap, ref, n):
     """Return (tab_fill[], mixedink_xml[], colorgroupswatch_xml[]).
 
     A stop that lands on a single ink is emitted as a plain Color/ + FillTint, not
     a one-ink MixedInk -- that is what makes an unmixed spot actually print solid.
     """
-    mixes = [tween(stops, i / (n - 1) if n > 1 else 0.0) for i in range(n)]
+    mixes = [tween(stops, keys, i / (n - 1) if n > 1 else 0.0) for i in range(n)]
     fills, inks, cgs = [], [], []
     for i, mix in enumerate(mixes):
-        nz = [(k, mix[k]) for k in TRAP if mix[k] > 0]
+        nz = [(k, mix[k]) for k in trap if mix[k] > 0]
         if len(nz) == 1:
-            fills.append(COLOR_REF[nz[0][0]])
+            fills.append(ref[nz[0][0]]["color_ref"])
             continue
-        name, ref = f"tab_{i:02d}", f"uTABcgs{i}"
+        name, cgsid = f"tab_{i:02d}", f"uTABcgs{i}"
         inks.append(
             f'\t<MixedInk Self="MixedInk/{name}" Model="Mixedinkmodel" Space="MixedInk" '
-            f'InkList="{" ".join(enc(INK_REF[k]) for k, _ in nz)}" '
+            f'InkList="{" ".join(enc(ref[k]["ink_ref"]) for k, _ in nz)}" '
             f'InkPercentages="{" ".join(str(p) for _, p in nz)}" BaseColor="n" '
-            f'InkNameList="{" ".join(enc(INK_NAME[k]) for k, _ in nz)}" '
-            f'MixedInkSpotColorNameList="{" ".join(enc(COLOR_NAME[k]) for k, _ in nz)}" '
-            f'MixedInkSpotColorList="{" ".join(enc(COLOR_REF[k]) for k, _ in nz)}" '
+            f'InkNameList="{" ".join(enc(ref[k]["ink_name"]) for k, _ in nz)}" '
+            f'MixedInkSpotColorNameList="{" ".join(enc(ref[k]["color_name"]) for k, _ in nz)}" '
+            f'MixedInkSpotColorList="{" ".join(enc(ref[k]["color_ref"]) for k, _ in nz)}" '
             f'Name="{name}" ColorEditable="true" ColorRemovable="true" Visible="true" '
-            f'SwatchCreatorID="7937" SwatchColorGroupReference="{ref}" />')
-        cgs.append(f'\t\t<ColorGroupSwatch Self="{ref}" SwatchItemRef="MixedInk/{name}" />')
+            f'SwatchCreatorID="7937" SwatchColorGroupReference="{cgsid}" />')
+        cgs.append(f'\t\t<ColorGroupSwatch Self="{cgsid}" SwatchItemRef="MixedInk/{name}" />')
         fills.append(f"MixedInk/{name}")
     return fills, inks, cgs
 
@@ -139,8 +191,9 @@ def main():
     if n < 1:
         raise SystemExit("N must be >= 1")
 
-    stops, stops_path = load_stops(build, args.tabstops)
-    fills, inks, cgs = build_swatches(stops, n)
+    stops, keys, stops_path = load_stops(build, args.tabstops)
+    trap, palette = resolve_palette(build, keys)
+    fills, inks, cgs = build_swatches(stops, keys, trap, palette, n)
     pitch = BOX_H / n
     scale = pitch / PITCH26
     ty0 = Y0 + (TY0_NUM26 - Y0) * scale     # number origin, scaled about the box top

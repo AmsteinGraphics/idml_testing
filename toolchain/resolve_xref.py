@@ -3,7 +3,7 @@
 
 The system has two coupled source objects that both point at one destination:
   * underlined word  -> <HyperlinkTextSource>   (character style `link`)
-  * margin number    -> <CrossReferenceSource>  (format `dm32_cross_ref`)
+  * margin number    -> <CrossReferenceSource>  (format `manual_cross_ref`)
 Each is bound by a <Hyperlink Source=... DestinationUniqueKey=...> in
 designmap.xml to a destination anchor (HyperlinkTextDestination /
 HyperlinkPageDestination / ParagraphDestination) identified by DestinationUniqueKey.
