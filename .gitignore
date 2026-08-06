@@ -8,3 +8,14 @@ template_build/
 template_build_18/
 template_build_masters/
 template_build_tabproof/
+
+# Forward-pipeline outputs — reproducible from the tracked inputs, see README
+# "Forward content production". Kept because they are NOT reproducible here:
+#   manual_template_test{1,2}.idml + .indd   poured submissions, authored in InDesign
+#   manual_template_test2_jsx_processed.idml an InDesign round-trip (needs InDesign)
+manual_template_test1_*.idml
+manual_template_test2_jsx.idml
+manual_template_test2_static.idml
+manual_template_test2_step*.idml
+manual_template_test2_transplant.idml
+manual_template_test2_xref.idml
