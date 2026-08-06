@@ -56,16 +56,79 @@ def rect_slot(block):
 
 
 def numframe_slot(tag):
+    """(in_tab_column, slot) for a master text frame.
+
+    in_tab_column separates "a tab number belonging to some other slot" -- drop it
+    from this master -- from "a different frame entirely" -- keep it, but it then
+    has to own its own story. slot is None for a frame that sits in the tab column
+    yet off the strip: BT-BaseTabs carries one such stray, u94e, parked at ty=792
+    (~495pt below the page), which computes to slot 51. Treating that as "not a
+    number frame" copied it into every chapter master still pointing at the
+    original's story, leaving four unthreaded frames sharing one story.
+    """
     it = re.search(r'ItemTransform="([^"]+)"', tag)
     ps = re.search(r'ParentStory="([^"]+)"', tag)
     if not it or not ps:
-        return None
+        return False, None
     vals = it.group(1).split()
     tx, ty = float(vals[4]), float(vals[5])
     if abs(tx) < 300:          # tab numbers sit in the outer margin
-        return None
+        return False, None
     s = NSLOT(ty)
-    return s if 0 <= s <= 25 else None
+    return True, (s if 0 <= s <= 25 else None)
+
+
+def repair_strip(xml):
+    """Move any off-strip tab-number frame back to its slot. Returns (xml, log).
+
+    BT-BaseTabs should carry 26 slots x 2 pages = 52 number frames. v1.76 ships
+    with one of them -- slot 25's right-page number, u25f77 -- parked exactly one
+    strip height (26 x 20.7233 = 538.80pt) below its home at ty=253.39, and every
+    file derived from the manual inherited it. A frame's x tells us which side it
+    belongs to; the single gap in the 52-slot grid tells us which slot. Without
+    this, chapter 26 would come out with a left-page number only.
+    """
+    frames = []
+    for m in re.finditer(r'<TextFrame\b[^>]*>', xml):
+        tag = m.group(0)
+        it = re.search(r'ItemTransform="([^"]+)"', tag)
+        if not it or 'ParentStory="' not in tag:
+            continue
+        vals = it.group(1).split()
+        tx, ty = float(vals[4]), float(vals[5])
+        if abs(tx) < 300:                      # not in the tab column
+            continue
+        frames.append(dict(start=m.start(), end=m.end(), tag=tag, it=it.group(1),
+                           tx=tx, ty=ty, slot=NSLOT(ty)))
+
+    present = {(f["slot"], "R" if f["tx"] > 0 else "L")
+               for f in frames if 0 <= f["slot"] <= 25}
+    missing = [(s, side) for s in range(26) for side in ("L", "R")
+               if (s, side) not in present]
+
+    splices, log = [], []
+    for f in frames:
+        if 0 <= f["slot"] <= 25:
+            continue
+        side = "R" if f["tx"] > 0 else "L"
+        gaps = [g for g in missing if g[1] == side]
+        if len(gaps) != 1:
+            log.append(f"off-strip frame at ty={f['ty']:.2f} ({side} side): "
+                       f"{len(gaps)} gaps on that side - left alone, needs a human")
+            continue
+        slot = gaps.pop(0)[0]
+        missing.remove((slot, side))
+        new_ty = TY0_NUM + slot * PITCH
+        vals = f["it"].split()
+        vals[5] = f"{new_ty:.10g}"
+        new_tag = f["tag"].replace(f'ItemTransform="{f["it"]}"',
+                                   'ItemTransform="%s"' % " ".join(vals))
+        splices.append((f["start"], f["end"], new_tag))
+        log.append(f"off-strip number frame belongs at slot {slot} {side}: "
+                   f"ty {f['ty']:.2f} -> {new_ty:.2f}")
+    for start, end, repl in sorted(splices, key=lambda s: s[0], reverse=True):
+        xml = xml[:start] + repl + xml[end:]
+    return xml, log
 
 
 def set_attr(tag, n, v):
@@ -96,18 +159,22 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint):
     t = re.sub(r'<Rectangle\b[^>]*>.*?</Rectangle>', keep_rect, t, flags=re.S)
 
     # --- prune number frames to this slot; capture the two kept stories ---
-    kept_stories = []      # (side, orig_story_id)
+    # EVERY frame kept here must end up owning its own story -- a story belongs to
+    # exactly one frame chain, so leaving a clone pointing at the source's story
+    # gives N unthreaded frames sharing it, which corrupts the document.
+    kept_stories = []      # (orig_story_id, is_tab_number)
     def keep_num(m):
         blk = m.group(0)
-        s = numframe_slot(re.match(r'<TextFrame\b[^>]*>', blk).group(0))
-        if s is None:
-            return blk                      # non-number text frame: leave
-        if s != slot:
-            return ""
         tag = re.match(r'<TextFrame\b[^>]*>', blk).group(0)
-        tx = float(re.search(r'ItemTransform="([^"]+)"', tag).group(1).split()[4])
-        story = re.search(r'ParentStory="([^"]+)"', tag).group(1)
-        kept_stories.append(("L" if tx < 0 else "R", story))
+        in_col, s = numframe_slot(tag)
+        story = re.search(r'ParentStory="([^"]+)"', tag)
+        if in_col:
+            if s != slot:
+                return ""                   # another slot's number, or an off-strip stray
+            kept_stories.append((story.group(1), True))
+            return blk
+        if story:                           # a different frame: keep, but clone its story
+            kept_stories.append((story.group(1), False))
         return blk
     t = re.sub(r'<TextFrame\b[^>]*>.*?</TextFrame>', keep_num, t, flags=re.S)
 
@@ -122,26 +189,36 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint):
         ren[rself] = mint()
     for fself in re.findall(r'<TextFrame\b[^>]*Self="([^"]+)"', t):
         ren[fself] = mint()
-    story_ren = {}
-    for side, sid in kept_stories:
-        story_ren[sid] = mint()
+    story_ren, is_number = {}, {}
+    for sid, isnum in kept_stories:
+        story_ren.setdefault(sid, mint())
+        is_number[sid] = is_number.get(sid, False) or isnum
     ren.update(story_ren)
 
     for old, new in ren.items():
         t = re.sub(rf'"{re.escape(old)}"', f'"{new}"', t)
 
-    # rename + rebase
-    t = re.sub(r'(<MasterSpread\b[^>]*?\bName=")[^"]*(")', rf'\g<1>S{k}-{S.xml_escape(title)}\g<2>', t, count=1)
+    # rename + rebase. A master's identity is NamePrefix + BaseName (Name is just
+    # the composed display form) and each master page is named after the prefix.
+    # Renaming only Name left every clone still claiming prefix "BT" / base
+    # "BaseTabs", i.e. four masters with one identity -- InDesign 2026 crashes on
+    # open; 2025 tolerated it. Mirror the shipped manual: S<k> / <title> / S<k>.
+    prefix, base = f"S{k}", S.xml_escape(title)
+    t = re.sub(r'(<MasterSpread\b[^>]*?\bName=")[^"]*(")', rf'\g<1>{prefix}-{base}\g<2>', t, count=1)
+    t = re.sub(r'(<MasterSpread\b[^>]*?\bNamePrefix=")[^"]*(")', rf'\g<1>{prefix}\g<2>', t, count=1)
+    t = re.sub(r'(<MasterSpread\b[^>]*?\bBaseName=")[^"]*(")', rf'\g<1>{base}\g<2>', t, count=1)
+    t = re.sub(r'(<Page\b[^>]*?\bName=")[^"]*(")', rf'\g<1>{prefix}\g<2>', t)
     t = re.sub(r'(<MasterSpread\b[^>]*Self="%s"[^>]*OverriddenPageItemProps=")[^"]*(")' % re.escape(master_self),
                r'\g<1>\g<2>', t)
 
-    # --- clone the two number stories with fresh ids + digit=k ---
+    # --- clone every kept frame's story with fresh ids; digit=k on the numbers ---
     story_files = []
     for old_sid, new_sid in story_ren.items():
         sp = os.path.join(build, "Stories", f"Story_{old_sid}.xml")
         sx = open(sp, encoding="utf-8").read()
         sx = re.sub(rf'"{re.escape(old_sid)}"', f'"{new_sid}"', sx)
-        sx = set_digit(sx, str(k))
+        if is_number[old_sid]:
+            sx = set_digit(sx, str(k))
         story_files.append((f"Story_{new_sid}.xml", sx, new_sid))
 
     return f"MasterSpread_{master_self}.xml", t, story_files, master_self
@@ -160,7 +237,14 @@ def main():
     secs = S.compute_sections(chapters, ordered_pages)
     base_self = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"',
                           master_by_name(build, "B-Base")[1]).group(1)
-    _, basetabs_xml = master_by_name(build, "BT-BaseTabs")
+    bt_path, basetabs_xml = master_by_name(build, "BT-BaseTabs")
+    # The kit's strip must already be complete -- correcting it on every run would
+    # paper over a broken kit. fix_tab_strip.py is the one-time migration.
+    _, strip_log = repair_strip(basetabs_xml)
+    if strip_log:
+        raise SystemExit("BT-BaseTabs' tab strip is incomplete:\n  "
+                         + "\n  ".join(strip_log)
+                         + f"\nRepair the kit first:  python3 fix_tab_strip.py {build}")
 
     # mint lowercase-hex ids that don't collide with anything already in the tree
     existing = set()
@@ -198,7 +282,8 @@ def main():
         # sanity: show the kept items in the first master
         m = plan[0]["mxml"]
         nrect = len(re.findall(r'<Rectangle\b', m))
-        nnum = len([1 for tg in re.findall(r'<TextFrame\b[^>]*>', m) if numframe_slot(tg) is not None])
+        nnum = len([1 for tg in re.findall(r'<TextFrame\b[^>]*>', m)
+                    if numframe_slot(tg)[1] is not None])
         sids = [s[2] for s in plan[0]["stories"]]
         print(f"first master rects={nrect} numframes={nnum} stories={sids}")
         return

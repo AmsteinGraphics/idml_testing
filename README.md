@@ -54,7 +54,9 @@ python3 -c "import zipfile; zipfile.ZipFile('dm32_print_manual_v1.76_fixed.idml'
 | `prune_styles.py` | report/remove styles dead in the **full manual** (not the empty template) with closure over every style-reference edge | `prune_styles.py template_build --ref extracted --dry-run` |
 | `bake_masters.py` | recolour every tab in every tab master from the placed `.ai` to native mixed-ink swatches, preserving geometry, bleed and master filiation | `bake_masters.py template_build template_build_masters` |
 | `make_18ch.py` | derive an 18-chapter template: prune masters, respace + recolour tabs, mirror tab+number onto both pages, write digits 1–18 | `make_18ch.py` |
-| `validate_idml.py` | referential-integrity check + swatch-whitelist enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
+| `fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
+| `fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
+| `validate_idml.py` | referential-integrity check + swatch-whitelist + underline enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
 | `repack.py` | folder → valid IDML (`mimetype` first and stored, rest deflated) | `repack.py <dir> <out.idml>` |
 | `resolve_xref.py` | cross-reference resolver / auditor | `resolve_xref.py --audit` |
 | `bake_tab_strip.py`, `tab_strip.py` | earlier tab-strip proof and compute-only ink table — superseded by `bake_masters.py` | — |
@@ -109,6 +111,63 @@ never gets packed into the `.idml`):
   strip and the N tabs are tweened per-channel between them. DM32 uses four pure stops:
   292 → Warm Gray 1 → 130 → Black.
 
+## Underlines are style-driven, always
+
+Underline comes from a character style — `link` / `link_slant` for oblique-reference
+trigger words, `code_styles:lcd_*` for LCD text — and from nowhere else. No
+`CharacterStyleRange` may carry its own `Underline*` attribute. That rules out both
+failure modes: an *inline* underline (`Underline="true"` on an unstyled range) and a
+style plus a *local override* (`CharacterStyle/link` together with `Underline="false"`),
+where the style says underline, the local formatting says don't, and the two drift
+apart from then on.
+
+There are four underline signatures in the design system, all style-defined:
+
+| cat | weight / offset | colour | styles | role |
+|---|---|---|---|---|
+| **1** | 0.375 / +1.5, overprint | **PANTONE 130 U** | `link`, `link_slant` | the orange oblique-link rule |
+| 2 | 10.339 / −2.4 | PANTONE Warm Gray 1 U | `code_styles:lcd_*` (7) | LCD background |
+| 3 | 10.339 / −3.66 | PANTONE Warm Gray 1 U | `code_styles:lcd_sk*` (4) | LCD background |
+| 4 | auto | text colour | `$ID/Hyperlink` | unused |
+
+Categories 2 and 3 are not rules: a 10 pt bar raised *into* the text is a uniform fill
+behind it, black on grey, simulating the calculator's LCD. Only category 1 is an
+underline in the traditional sense. Within each category the underline is identical —
+the styles differ only in font, size and slant. `link_slant` is `BasedOn link` and
+declares no underline properties of its own, so it inherits all four; the two are
+visually indistinguishable. `fix_underlines.py --category N` restricts to one signature.
+
+Category 4 is not a design decision — `$ID/Hyperlink` is InDesign's factory link style,
+reserved and undeletable, present in every IDML and applied nowhere in this one. It is
+what an author gets by creating a hyperlink *without* applying `link`: blue
+`Color/Hyperlink` (process CMYK 86/57/0/16) with a default-weight underline, i.e. a
+process separation in a four-spot-ink document. Since on black text the swatch check
+wouldn't catch it, **check 10b flags any range that applies it**. It is reported, never
+auto-fixed — swapping it for `link` is a semantic call, as it may be a genuine URL rather
+than an oblique reference.
+
+**Underline properties live in two places, and both must be cleaned.** Scalars are
+open-tag attributes (`Underline`, `UnderlineWeight`, `UnderlineOffset`); object-valued
+ones are `<Properties>` child elements (`<UnderlineColor type="object">Color/PANTONE 130
+U</UnderlineColor>`). An attribute-only scan silently misses the colour — and the
+override InDesign leaves behind on a `link` range is exactly `<UnderlineColor
+type="string">Text Color</UnderlineColor>`, which defeats the style's orange.
+
+This is enforced as check 10 in `validate_idml.py` and repaired by `fix_underlines.py`.
+The toolchain already obeys it by construction — `build_xref_boxes.py` suppresses a dead
+link by swapping the *style* to `$ID/[No character style]`, never by writing
+`Underline="false"`. **InDesign is what reintroduces it:** inserting an anchored object
+splits a `link`-styled range and leaves an empty stub carrying a full override block
+(`Underline="false" UnderlineOffset="-9999" …`). Since the forward pipeline ends in
+"open in InDesign, run the JSX, re-export", run `fix_underlines.py` after every
+round-trip, before `repack.py`.
+
+Only a bare `Underline="true|false"` toggle on a range that *holds text* can change what
+prints, so that is the one case `fix_underlines.py` reports and leaves alone — the fix
+there is a judgment call (drop the override and the word becomes underlined, or drop the
+style and it becomes plain). Empty ranges and `Underline*` geometry with no toggle are
+inert and stripped by default.
+
 ## The tab strip
 
 The numbered thumb-tab index down the outer page edge is the only part of the design
@@ -138,6 +197,25 @@ wouldn't render. Native tabs *do* render, so `make_18ch.py` re-bases each chapte
 onto `Base` and clears its override list: each master then owns exactly one tab and one
 number, mirrored onto both pages of the facing spread.
 
+### The strip was one frame short
+
+`BT-BaseTabs` carries the full numbered strip: 26 slots × 2 pages = 52 number frames.
+`dm32_print_manual_v1.76.idml` ships with 51 of them on the grid. Slot 25's right-page
+number (`u25f77`) sits at ty=792.19 — exactly one strip height (26 × 20.7233 = 538.80 pt)
+below its home at ty=253.39, about 495 pt off the bottom of the page. Every template
+derived from the manual inherited it.
+
+It caused two failures. `apply_tabs.py` computes slot 51 for it, couldn't classify it,
+and copied it into every chapter master still pointing at the original's story — leaving
+N unthreaded frames sharing one story, which corrupts the document. And a 26-chapter
+manual would get no right-page number on chapter 26, since the frame for that slot isn't
+on the strip.
+
+All three templates have been migrated (52/52). `fix_tab_strip.py` is the one-time repair
+for any other kit or in-flight document; a frame's x gives the page, the single gap in the
+grid gives the slot. `apply_tabs.py` now **refuses** a kit whose strip is incomplete rather
+than correcting it on every run — the kit is the thing that should be right.
+
 ## IDML gotchas
 
 Collected the hard way; all of these will silently produce a file InDesign rejects:
@@ -151,6 +229,11 @@ Collected the hard way; all of these will silently produce a file InDesign rejec
   *and* a matching `<ColorGroupSwatch>` in `designmap.xml`, cross-linked by id.
 - `open(p,'w').write(open(p).read())` truncates the file before the inner read runs.
   Read into a variable first.
+- Style and range properties are split across **attributes and `<Properties>` children**:
+  scalars are attributes, object references (colours, `BasedOn`) are child elements.
+  Reading only the opening tag will tell you a style sets no colour when it plainly does.
+- Anchoring a scan with `pattern.match(text[pos:])` copies the rest of the file on every
+  match — O(n²) on the manual's body stories. Use `pattern.match(text, pos)`.
 - On a template, "unused" ≠ removable. Style-usage analysis can't distinguish an
   intentionally idle design-system style from junk — all 13 styles flagged dead in v1.76
   turned out to be deliberate, and were kept.

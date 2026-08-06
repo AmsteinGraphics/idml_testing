@@ -161,7 +161,73 @@ if wl_path and os.path.exists(wl_path):
     wl_report = f"{os.path.basename(wl_path)}: {sorted(allow)} -> " + \
                 ("clean" if not offenders else f"{len(offenders)} off-palette")
 
-# ---- 10. no leftover Hyperlinks pointing nowhere (content graph gone) ------
+# ---- 10. underline must be style-driven, never local formatting ------------
+# Underline belongs to a character style (`link`, `code_styles:lcd_*`) and
+# nowhere else. Two things break that: an INLINE underline (Underline="true" on
+# an unstyled range) and a style plus a LOCAL OVERRIDE (CharacterStyle/link
+# together with Underline="false") -- the style says underline, the local
+# formatting says don't, and they drift apart from then on. InDesign
+# reintroduces these on export, so this is re-checked after every round-trip.
+# IDML splits these across TWO places: scalars are open-tag ATTRIBUTES
+# (Underline, UnderlineWeight, ...) while object-valued ones are <Properties>
+# CHILD ELEMENTS (<UnderlineColor>) -- e.g. a link-styled range carrying
+# UnderlineColor="Text Color", which defeats the style's PANTONE 130 U orange.
+# Checking attributes alone silently misses the colour.
+UL_ATTR = re.compile(r'\bUnderline[A-Za-z]*="')
+UL_CHILD = re.compile(r'<Underline[A-Za-z]*\b')
+RANGE_OPEN = re.compile(r'<(CharacterStyleRange|ParagraphStyleRange)\b([^>]*?)(/?)>')
+PROPS_AT = re.compile(r'\s*<Properties>(.*?)</Properties>', re.S)  # .match(t, pos), no slicing
+ul_empty, ul_text = [], []
+for f in stories + layout:
+    t = reads(f)
+    if "Underline" not in t:
+        continue
+    for m in RANGE_OPEN.finditer(t):
+        tag, attrs, selfclose = m.group(1), m.group(2), m.group(3)
+        pm = None if selfclose else PROPS_AT.match(t, m.end())
+        if not UL_ATTR.search(attrs) and not (pm and UL_CHILD.search(pm.group(1))):
+            continue
+        # style ranges don't nest inside themselves, so the next close is ours
+        end = t.find(f"</{tag}>", m.end()) if not selfclose else m.end()
+        body = t[m.end():end] if end > 0 else ""
+        txt = "".join(re.findall(r'<Content>(.*?)</Content>', body, re.S))
+        st = re.search(r'AppliedCharacterStyle="([^"]+)"', attrs)
+        rec = (os.path.relpath(f, D), (st.group(1) if st else "-"), txt.strip())
+        # only a bare Underline="true|false" toggle on real text changes what
+        # prints; Underline* geometry alone is inert residue
+        (ul_text if txt.strip() and re.search(r'\bUnderline="', attrs)
+         else ul_empty).append(rec)
+check(not (ul_empty or ul_text),
+      f"local underline formatting (must come from a character style only): "
+      f"{len(ul_empty)} strippable, {len(ul_text)} contradicting a style on live text"
+      + (" -- run fix_underlines.py" if not ul_text else
+         " -- the live ones need a human call, see fix_underlines.py")
+      + "".join(f"\n      {p}: {s} {txt[:40]!r}" for p, s, txt in (ul_text + ul_empty)[:6]))
+
+# ---- 10b. InDesign's factory link style must never be applied --------------
+# $ID/Hyperlink is reserved, undeletable, and present in every IDML: blue
+# Color/Hyperlink (process CMYK 86/57/0/16) with a default-weight underline.
+# Applying it is always wrong here -- the house oblique-link rule is
+# CharacterStyle/link (0.375pt, PANTONE 130 U, overprint). It's the default an
+# author gets by creating a hyperlink without applying `link`, and on black text
+# the swatch check in 9 wouldn't catch it. Reported, never auto-fixed: swapping
+# it for `link` is a semantic call (it may be a genuine URL, not an oblique ref).
+HL_STYLE = 'AppliedCharacterStyle="CharacterStyle/$ID/Hyperlink"'
+hl_hits = []
+for f in stories + layout:
+    t = reads(f)
+    if HL_STYLE not in t:
+        continue
+    for m in re.finditer(re.escape(HL_STYLE) + r'[^>]*?>(.*?)</CharacterStyleRange>', t, re.S):
+        txt = "".join(re.findall(r'<Content>(.*?)</Content>', m.group(1), re.S)).strip()
+        hl_hits.append((os.path.relpath(f, D), txt))
+check(not hl_hits,
+      f"InDesign's factory $ID/Hyperlink style applied to {len(hl_hits)} range(s) "
+      f"-- blue process-CMYK, not the house CharacterStyle/link (PANTONE 130 U)"
+      + "".join(f"\n      {p}: {(repr(txt[:50]) if txt else '(empty range)')}"
+                for p, txt in hl_hits[:6]))
+
+# ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
 n_pd = sum(1 for ch in dm if local(ch.tag) == "HyperlinkPageDestination")
 # informational, not a failure:
