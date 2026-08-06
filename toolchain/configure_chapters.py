@@ -220,6 +220,10 @@ def main():
             base_self = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1)
             break
 
+    # the old grid, needed to map any stray tab back to its slot before rebuild
+    import apply_tabs
+    old_pitch = apply_tabs.read_grid(bt)[1]
+
     # --- templates: one tab rect and one number frame per page ---------------
     rects = [m.group(0) for m in re.finditer(r'<Rectangle\b[^>]*>.*?</Rectangle>', bt, re.S)
              if re.search(TABFILL, m.group(0))]
@@ -369,6 +373,42 @@ def main():
         open(os.path.join(build, "Stories", f"Story_{sid}.xml"), "w",
              encoding="utf-8").write(sx)
 
+    # --- stray tabs on other masters ----------------------------------------
+    # A tab can also sit on a master that is neither BaseTabs nor a chapter master:
+    # the kit's Sx-Section carries slot 0's tab, and that master IS applied to
+    # pages, so the tab renders. Left alone it keeps the OLD ramp's colour and the
+    # OLD pitch's height — a 292 tab of the wrong size in a manual whose ramp is
+    # yellow. Regenerate it in place, at its own slot.
+    restyled = 0
+    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
+        if f == bt_path or any(f == p for p, _ in chapter_masters.values()):
+            continue
+        t = open(f, encoding="utf-8").read()
+        if not re.search(TABFILL, t):
+            continue
+
+        def regen(m):
+            nonlocal restyled
+            blk = m.group(0)
+            if not re.search(TABFILL, blk):
+                return blk
+            it = list(map(float, re.search(r'ItemTransform="([^"]+)"', blk).group(1).split()))
+            pts = re.findall(r'Anchor="([^"]+)"', blk)
+            xs = [float(p.split()[0]) * it[0] + it[4] for p in pts]
+            ys = [float(p.split()[1]) * it[3] + it[5] for p in pts]
+            if not xs or abs(sum(xs) / len(xs)) < 300:      # not in the tab column
+                return blk
+            side = "R" if sum(xs) / len(xs) > 0 else "L"
+            slot = min(max(round((min(ys) - Y0) / old_pitch), 0), n - 1)
+            restyled += 1
+            x0, x1 = tpl[side]["xspan"]
+            return rect_xml(re.match(r'<Rectangle\b[^>]*>', blk).group(0), x0, x1,
+                            Y0 + slot * pitch, Y0 + (slot + 1) * pitch, fills[slot])
+
+        new = re.sub(r'<Rectangle\b[^>]*>.*?</Rectangle>', regen, t, flags=re.S)
+        if new != t:
+            open(f, "w", encoding="utf-8").write(new)
+
     # a page pointing at a master we just deleted would dangle
     repointed = 0
     if dropped_masters and base_self:
@@ -420,6 +460,8 @@ def main():
     print(f"N={n} pitch={pitch:.4f} | strip: {len(new_rects)} tab rects, "
           f"{len(new_frames)} numbered frames, {len(inks)} mixed inks + "
           f"{n - len(inks)} pure | stops: {os.path.basename(stops_path)}")
+    if restyled:
+        print(f"stray tabs on other masters regenerated: {restyled}")
     if chapter_masters:
         print(f"chapter masters: {kept_masters} kept and regenerated, "
               f"{len(dropped_masters)} dropped"

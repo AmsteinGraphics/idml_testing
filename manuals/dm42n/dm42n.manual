@@ -7,10 +7,9 @@
 # Sanctioned palette. prune_swatches.py keeps these even when unused;
 # validate_idml.py flags any applied colour that is not listed (a mixed ink built
 # only from listed inks counts as listed). Black plus up to 3 spots, Black always.
-swatch = Black
-swatch = PANTONE 292 U
 swatch = PANTONE 130 U
 swatch = PANTONE Warm Gray 1 U
+swatch = Black
 
 # How many of titles:lvl1..lvl4 this manual uses, counting from the top.
 # Optional. It does NOT fix numbering -- content starting at lvl1 already numbers
@@ -27,7 +26,5 @@ tab_level = 2
 # at 100%; a mix is "PANTONE 292 U 60%, Black 40%". Percentages are per-ink and
 # independent. N tabs are tweened between these stops; a tab landing on a single
 # ink becomes a plain Color/ + FillTint so the spot prints solid.
-tab_stop = PANTONE 292 U
-tab_stop = PANTONE Warm Gray 1 U
 tab_stop = PANTONE 130 U
-tab_stop = Black
+tab_stop = PANTONE 130 U, Black
