@@ -89,6 +89,7 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 
 | script | what it does | run |
 |---|---|---|
+| `toolchain/build_manual.py` | run the whole pre-InDesign leg for one submission — the sequence below, in one command | `build_manual.py manuals/<p>/submissions/<f>.idml` |
 | `toolchain/standardize_kit.py` | strip a product prefix off the kit's shared design-system objects (`dm32_list` -> `manual_list`, …) | `standardize_kit.py <dir> [--from P] [--to Q]` |
 | `toolchain/fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
 | `toolchain/fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
@@ -122,6 +123,21 @@ chapter masters (`apply_tabs.py` generates those per chapter). A submission is t
 with content poured in: it arrives with underlined trigger words already wired to
 destination anchors, but no margin boxes, no sections, no tabs, and usually only
 `titles:lvl4` joined to the numbered list.
+
+One command for the whole pre-InDesign leg:
+
+```bash
+python3 toolchain/build_manual.py manuals/dm32/submissions/SUB.idml
+# -> manuals/dm32/out/SUB.ready.idml  + SUB.xref_log.csv
+```
+
+CI runs exactly this. `.github/workflows/build-manual.yml` triggers on any change under
+`manuals/*/submissions/`, or under `toolchain/` or `kit/` (which affect every manual),
+builds each submission, fails if one doesn't validate, and uploads the ready-for-InDesign
+files as artifacts. It stops at the InDesign break like everything else — CI cannot run
+the JSX.
+
+Or the same thing stage by stage:
 
 ```bash
 B=manuals/dm32/build

@@ -7,8 +7,8 @@ __pycache__/
 # that was tracked before; recover with `git show <rev>:<path>`.
 manuals/*/build/
 manuals/*/build*.csv
+manuals/*/out/
 manuals/*/*_v[0-9]*.idml
-manuals/*/out*.idml
 
 # legacy top-level working trees (pre-restructure)
 extracted/

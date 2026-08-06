@@ -1,0 +1,119 @@
+name: Build manual
+
+# A changed submission is content someone poured in InDesign and exported. This
+# takes it through every stage the toolchain can do without InDesign and fails if
+# it doesn't validate — so a broken submission is caught on push, not on the desk.
+#
+# It CANNOT finish the manual. Margin boxes have to be created natively by
+# place_xref_boxes.jsx inside InDesign (a hand-authored anchored frame never binds
+# on import), so the artifact here is the file to open and run that script on.
+
+on:
+  push:
+    paths:
+      - 'manuals/*/submissions/**.idml'
+      - 'toolchain/**'
+      - 'kit/**'
+  pull_request:
+    paths:
+      - 'manuals/*/submissions/**.idml'
+      - 'toolchain/**'
+      - 'kit/**'
+  workflow_dispatch:
+    inputs:
+      submission:
+        description: 'Path to one submission .idml (blank = every submission)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need history to diff against the base commit
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # standard library only — nothing to install
+
+      - name: Work out which submissions to build
+        id: pick
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.submission }}" ]; then
+            printf '%s\n' "${{ github.event.inputs.submission }}" > picked.txt
+          else
+            case "${{ github.event_name }}" in
+              pull_request) BASE="${{ github.event.pull_request.base.sha }}" ;;
+              *)            BASE="${{ github.event.before }}" ;;
+            esac
+            # a new branch reports an all-zero base, and a toolchain or kit change
+            # can affect every manual — in both cases rebuild everything
+            if [ -z "${BASE:-}" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+              git ls-files 'manuals/*/submissions/*.idml' > picked.txt
+            else
+              if git diff --name-only "$BASE" "${{ github.sha }}" \
+                   | grep -qE '^(toolchain|kit)/'; then
+                git ls-files 'manuals/*/submissions/*.idml' > picked.txt
+              else
+                git diff --name-only "$BASE" "${{ github.sha }}" \
+                  | grep -E '^manuals/[^/]+/submissions/.*\.idml$' \
+                  | while read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done > picked.txt || true
+              fi
+            fi
+          fi
+          echo "count=$(wc -l < picked.txt)" >> "$GITHUB_OUTPUT"
+          echo "Submissions to build:"; cat picked.txt
+
+      - name: Build each submission
+        if: steps.pick.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          fail=0
+          while read -r sub; do
+            [ -n "$sub" ] || continue
+            echo "::group::$sub"
+            if python3 toolchain/build_manual.py "$sub"; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error file=$sub::pipeline failed for $sub"
+              fail=1
+            fi
+          done < picked.txt
+          exit $fail
+
+      - name: Summarise
+        if: always() && steps.pick.outputs.count != '0'
+        run: |
+          {
+            echo '### Ready for InDesign'
+            echo
+            echo 'Open each file below, run `toolchain/place_xref_boxes.jsx`, export IDML,'
+            echo 'then finish with `fix_underlines.py` → `validate_idml.py` → `repack.py`.'
+            echo
+            for f in manuals/*/out/*.ready.idml; do
+              [ -e "$f" ] && echo "- \`$f\`"
+            done
+            echo
+            for f in manuals/*/out/*.xref_log.csv; do
+              [ -e "$f" ] || continue
+              # --jsx defers box creation, so the action is jsx-box, not box
+              boxes=$(grep -cE '^(jsx-)?box,' "$f" || true)
+              dead=$(grep -c  '^suppressed,'  "$f" || true)
+              echo "\`$(basename "$f")\`: $boxes oblique links for the JSX to place, $dead dead links suppressed"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.pick.outputs.count != '0'
+        with:
+          name: ready-for-indesign
+          path: |
+            manuals/*/out/*.ready.idml
+            manuals/*/out/*.xref_log.csv
+          if-no-files-found: warn
+          retention-days: 30
