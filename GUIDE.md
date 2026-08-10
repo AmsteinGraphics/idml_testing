@@ -101,6 +101,44 @@ Two things you should know about the loop:
 
 ---
 
+## If you change the kit
+
+The kit (`kit/manual_kit.idml`) is a **mould, not a master document**. Pouring content
+into it gives you a file that owns a complete private copy of the design — its own
+masters, styles, colours. After that the two are unrelated files.
+
+So if you change a master in the kit — say you add a text variable to the running title
+on B-Base — **nothing that already exists notices.** New pours get it. Manuals in flight
+keep the old design, quietly, forever.
+
+To make a kit change reach a manual, add one line to that manual's `.manual` file:
+
+```
+sync = masters
+```
+
+From then on, every build re-transplants the kit's masters into that manual, so the kit is
+genuinely the source of truth. Without the line you still get a report of what has drifted
+apart — it just doesn't change anything.
+
+Three things worth knowing before you switch it on:
+
+- **Your page overrides survive.** If you've overridden a master item on a page (a running
+  head with custom text, say), that keeps working — the transplant deliberately preserves
+  the identity of every item a page points at. If a kit change would break one, the build
+  stops and tells you which, rather than doing it.
+- **What the master needs comes with it.** New styles, colours and text variables the
+  master references are brought across automatically. **Fonts are not** — the build tells
+  you which are missing and you install and add them yourself.
+- **Your tabs and chapter masters are untouched.** Those are generated from your content
+  every build; the kit has no opinion about them.
+
+To try a kit change before committing it:
+
+```bash
+python3 toolchain/build_manual.py manuals/dm32/submissions/f.idml --kit /path/to/trial-kit.idml
+```
+
 ## Getting the built file
 
 Every time something is pushed to the repository, the build is published to an address
@@ -142,6 +180,11 @@ and let it clean up normally.
 The file has duplicate masters, usually from an old version of the toolchain. Run
 `python3 toolchain/normalize_input.py <build dir>` first.
 
+**"transplant would orphan page overrides"**
+You have `sync = masters` on, and the kit no longer has an item that some of your pages
+override. It names the item and how many pages. Either put it back in the kit, or clear
+those overrides in InDesign — the tool won't guess which you meant.
+
 **Underline warnings**
 Underlines must come from a character style, never from local formatting — otherwise the
 orange rule quietly turns black. Most are cleaned automatically. If it says it *left some
@@ -164,6 +207,7 @@ swatch    = PANTONE 130 U
 levels    = 4                     # how many heading levels it uses
 tab_level = 2                     # which level gets a thumb tab
 number_from = 2                   # first level that takes a number
+sync      = masters               # optional: keep the kit's masters authoritative
 tab_stop  = PANTONE 130 U         # the tab colours, top of the strip…
 tab_stop  = Black                 # …to the bottom; the rest are blended
 ```

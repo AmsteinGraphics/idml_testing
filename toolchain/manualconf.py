@@ -48,6 +48,9 @@ import re
 KIT_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "kit", "manual_kit.manual")
 
+# What `sync = ...` accepts. See sync_from_kit.py.
+SYNCABLE = {"masters", "styles", "swatches"}
+
 
 def candidates(build, suffix=".manual"):
     b = build.rstrip("/")
@@ -84,7 +87,7 @@ def parse_stop(value, where):
 def load(build, explicit=None):
     """{swatches, levels, tab_level, tab_stops, chapter_style, heading_styles, path}."""
     conf = dict(swatches=[], levels=None, tab_level=None, number_from=None,
-                tab_stops=[], path=None)
+                tab_stops=[], sync=[], path=None)
 
     path = explicit
     if path and not os.path.exists(path):
@@ -109,10 +112,23 @@ def load(build, explicit=None):
                 if not v.isdigit():
                     raise SystemExit(f"{path}:{n}: {k} must be a number, got {v!r}")
                 conf[k] = int(v)
+            elif k == "sync":
+                # Which parts of the kit are authoritative for this manual, i.e.
+                # re-transplanted on every build so a kit change reaches it. Opt-in:
+                # a document owns a private copy of the whole design system, and
+                # overwriting it is not something to do to a manual by surprise.
+                for part in (x.strip() for x in v.split(",")):
+                    if not part:
+                        continue
+                    if part not in SYNCABLE:
+                        raise SystemExit(f"{path}:{n}: sync {part!r} is not one of "
+                                         f"{', '.join(sorted(SYNCABLE))}")
+                    if part not in conf["sync"]:
+                        conf["sync"].append(part)
             else:
                 raise SystemExit(f"{path}:{n}: unknown key {k!r} "
                                  f"(expected swatch, tab_stop, levels, tab_level, "
-                                 f"number_from)")
+                                 f"number_from, sync)")
     else:
         # a pre-consolidation manual may still carry the palette on its own
         legacy = next((p for p in candidates(build, ".swatches") if os.path.exists(p)), None)

@@ -74,6 +74,11 @@ def main():
     ap.add_argument("input", nargs="?", default=DEFAULT)
     ap.add_argument("-n", type=int, default=3, help="generations to run (>= 3)")
     ap.add_argument("--config", help="a .manual to use (default: the input's own)")
+    ap.add_argument("--kit", help="build against this kit — check a kit revision keeps "
+                                  "the pipeline convergent before committing it")
+    ap.add_argument("--sync", action="store_true",
+                    help="declare `sync = masters` for the run, so the kit transplant is "
+                         "exercised even though no tracked manual opts into it")
     args = ap.parse_args()
 
     src = os.path.abspath(args.input)
@@ -93,6 +98,12 @@ def main():
              if f.endswith(".manual")), None)
         if conf:
             shutil.copy(conf, os.path.join(tmp, "t.manual"))
+        if args.sync:
+            # opting in here rather than in a tracked manual: syncing masters is a
+            # decision about a real book, but the transplant still has to be proved
+            # convergent, and this is the fixture that carries everything awkward
+            with open(os.path.join(tmp, "t.manual"), "a", encoding="utf-8") as f:
+                f.write("\nsync = masters\n")
         shutil.copy(src, os.path.join(sub, "g0.idml"))
 
         prints = []
@@ -100,7 +111,8 @@ def main():
             print(f"\n=== generation {i + 1} ===")
             r = subprocess.run(
                 [sys.executable, os.path.join(HERE, "build_manual.py"),
-                 os.path.join(sub, f"g{i}.idml"), "--out", os.path.join(tmp, "out")],
+                 os.path.join(sub, f"g{i}.idml"), "--out", os.path.join(tmp, "out")]
+                + (["--kit", os.path.abspath(args.kit)] if args.kit else []),
                 text=True, capture_output=True)
             if r.returncode != 0:
                 print(r.stdout[-4000:])

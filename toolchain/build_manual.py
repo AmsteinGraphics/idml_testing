@@ -65,6 +65,9 @@ def main():
                     help="normalise the input first even if it looks like a submission")
     ap.add_argument("--as-submission", action="store_true",
                     help="never normalise — treat the input as a fresh submission")
+    ap.add_argument("--kit", help="sync against this kit .idml instead of kit/manual_kit.idml "
+                                  "— try a kit revision against a real manual before "
+                                  "committing it")
     args = ap.parse_args()
 
     sub = os.path.abspath(args.submission)
@@ -104,6 +107,13 @@ def main():
 
     # idempotent on an already-standard document; migrates a pre-standardisation one
     run("standardize_kit.py", build)
+    # AFTER standardize, BEFORE everything else. After, because the kit's masters
+    # reference the standard names (manual_head, not dm32_head) and a document
+    # still on the old ones has to be renamed first or the transplant pulls in a
+    # duplicate. Before, because configure_chapters re-tweens the tab strip the
+    # kit hands over to this manual's own ink ramp. Reports drift and changes
+    # nothing unless the manual's config declares `sync`.
+    run("sync_from_kit.py", build, *(["--kit", args.kit] if args.kit else []))
     run("restyle_heading_levels.py", build)   # no-op unless number_from is declared
     run("fix_numbering.py", build)
     run("sectionize.py", build)

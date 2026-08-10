@@ -108,7 +108,11 @@ jobs:
       # fixed fixture, so one manual's broken content must not stop it reporting.
       - name: Re-entrancy fixpoint
         if: '!cancelled()'
-        run: python3 toolchain/test_reentrancy.py
+        run: |
+          python3 toolchain/test_reentrancy.py
+          # again with the kit declared authoritative, which no tracked manual does
+          # yet -- the transplant rewrites every master and must still converge
+          python3 toolchain/test_reentrancy.py --sync
 
       # One fixed name per manual, so the download URL never moves. The build is
       # named after the SUBMISSION, which changes whenever a new one is poured; the

@@ -97,6 +97,8 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 | `toolchain/restyle_heading_levels.py` | apply the configured heading hierarchy — set levels 1..N, create missing styles, and take label levels out of the numbering | `restyle_heading_levels.py <dir>` |
 | `toolchain/build_manual.py` | run the whole pre-InDesign leg for one submission — the sequence below, in one command | `build_manual.py manuals/<p>/submissions/<f>.idml` |
 | `toolchain/standardize_kit.py` | strip a product prefix off the kit's shared design-system objects (`dm32_list` -> `manual_list`, …) | `standardize_kit.py <dir> [--from P] [--to Q]` |
+| `toolchain/sync_from_kit.py` | push kit design changes into a document that was poured before them — identity-preserving master transplant | `sync_from_kit.py <dir> [--masters] [--dry-run]` |
+| `toolchain/test_reentrancy.py` | prove the pipeline is a fixpoint on its own output | `test_reentrancy.py [INPUT] [--sync] [--kit F]` |
 | `toolchain/fix_tab_strip.py` | one-time migration: put BT-BaseTabs' off-strip tab number back on the grid | `fix_tab_strip.py <dir> [--dry-run]` |
 | `toolchain/fix_underlines.py` | enforce style-driven underlines — strip local `Underline*` formatting left by an InDesign round-trip | `fix_underlines.py <dir> [--dry-run] [--force]` |
 | `toolchain/validate_idml.py` | referential-integrity check + swatch-whitelist + underline enforcement; exit 0 = clean | `validate_idml.py <dir> [--swatches FILE]` |
@@ -231,6 +233,86 @@ unique and lowercase-hex.
 
 That test is the tripwire for the failure mode that doesn't announce itself. A stage that
 adds instead of replacing never errors; it just leaves two of everything next time round.
+
+## Changing the kit after manuals exist
+
+Pouring content into `kit/manual_kit.idml` produces a document that owns a **complete
+private copy** of the design system — its own masters, styles, swatches, text variables.
+Nothing links it back. Exactly one thing in the kit is read at build time:
+
+```
+toolchain/manualconf.py:49    kit/manual_kit.manual
+```
+
+So the two halves of the kit behave completely differently:
+
+- **`manual_kit.manual` (config)** — the last fallback in config discovery, read on every
+  build. Change the palette or `number_from` there and it reaches every manual that
+  doesn't override it, immediately.
+- **`manual_kit.idml` (design)** — never opened by anything. Edit a master and it changes
+  what the *next* pour inherits. Nothing already in flight notices.
+
+That gap is real and measurable. `manual_template_test2.idml` is missing `titles:lvl1` and
+still names its text variables `dm32_head`; DM42n matches the current kit exactly. Both
+build, because the toolchain reads each document's own `Styles.xml` rather than assuming
+the kit's.
+
+`sync_from_kit.py` closes it. Opt in per manual:
+
+```
+sync = masters              # in <product>.manual; or: masters, styles, swatches
+```
+
+With nothing declared it reports drift and changes nothing, which is why
+`build_manual.py` can run it on every build. It sits **after `standardize_kit`** (the kit's
+masters name `manual_head`, so a document still on `dm32_head` has to be renamed first)
+and **before `configure_chapters`** (which re-tweens the strip the kit hands over to this
+manual's own ink ramp — otherwise the kit's 292 ramp would land in a manual that has no
+292).
+
+### Why it is not a file copy
+
+A document page that overrides a master item stores **the master item's id** in the page's
+`OverrideList`. B-Base's two running-head frames are overridden on 18 pages each in DM42n
+— 36 references to two ids. Drop in the kit's master with its own ids and every one of
+those points at nothing.
+
+So the transplant is identity-preserving: kit items are matched to the document's by tag
+and position, the **document's** ids are kept, and only genuinely new items get minted
+ones. Afterwards every id that any page overrides must still exist, or it is a hard error
+naming them — `--force` to proceed anyway.
+
+Two more things that are not obvious:
+
+- **Cross-master references.** A master can be based on another master, so `AppliedMaster`
+  points out of the file. The whole kit→document master map is resolved *before* any
+  transplant runs; without that, B-Base arrives pointing at a kit id this document has
+  never heard of.
+- **Stories are matched through their frames**, not by id — a story id is a reference,
+  never a `Self` inside the master. Keying it off the item map never matches, so every
+  build would mint a fresh set and churn `StoryList` on a run that changed nothing. Going
+  via the owning frame is what makes this idempotent, and it also stops two frame chains
+  ending up sharing one story.
+
+### What comes with a master
+
+A master is not self-contained. Whatever it references and the document lacks is pulled
+across, or it renders against definitions that aren't there: paragraph/character/object
+styles (following `BasedOn` and `NextStyle` so a chain arrives whole), colours and mixed
+inks (a `MixedInk` also needs its `ColorGroupSwatch` in designmap), and **text variables**
+— the case worth spelling out, because a variable's *definition* lives in `designmap.xml`
+while its *use* lives in a master's story, so bringing the master alone brings half a
+feature.
+
+Fonts are **reported, never transplanted** — that is a licensing question, not a file
+operation.
+
+Never touched: masters named `S<k>`, which `apply_tabs.py` generates per chapter from the
+content, and anything that is content rather than design.
+
+`build_manual.py --kit OTHER.idml` builds against a different kit, so a kit revision can be
+tried against a real manual before it is committed. `test_reentrancy.py --sync --kit F`
+checks it stays convergent.
 
 ### Getting the build: a fixed URL
 
