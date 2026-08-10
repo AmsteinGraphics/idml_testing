@@ -3,6 +3,9 @@
 Python tooling for inspecting, repairing and generating [IDML](https://www.adobe.com/devnet/indesign/documentation.html)
 (InDesign Markup Language) packages, built around the SwissMicros **DM32 print manual**.
 
+> **Just want to make a manual?** Read [GUIDE.md](GUIDE.md) — three steps, six commands,
+> no XML. This file is the reference for how and why it works.
+
 Three jobs:
 
 1. **Audit the shipped manual** — resolve and check its "oblique link" cross-reference
@@ -83,6 +86,9 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 | `toolchain/build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
 | `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
 | `toolchain/strip_xref_boxes.py` | inverse of `build_xref_boxes.py` — remove all margin boxes to manufacture a boxless submission | `strip_xref_boxes.py <dir> [--dry-run]` |
+| `toolchain/normalize_input.py` | take a finished manual back to submission state so the forward leg can run again — this is what makes the pipeline re-entrant | `normalize_input.py <dir> [--detect] [--dry-run]` |
+| `toolchain/finish_manual.py` | close the loop: underline cleanup + validate + repack on an export that has its boxes, **keeping** them | `finish_manual.py <export>.idml` |
+| `toolchain/fetch_build.py` | download the current CI build from its fixed URL | `fetch_build.py [product ...] [--list]` |
 
 ### Shared
 
@@ -131,26 +137,14 @@ python3 toolchain/build_manual.py manuals/dm32/submissions/SUB.idml
 # -> manuals/dm32/out/SUB.ready.idml  + SUB.xref_log.csv
 ```
 
-CI runs exactly this, in two workflows:
-
-- **`build-manual.yml`** — on any change under `manuals/*/submissions/`, or under
-  `toolchain/` or `kit/` (which affect every manual). Builds each submission, fails if
-  one doesn't validate, uploads the ready files as run artifacts (30-day retention).
-  This is the routine check that a submission survives the pipeline.
-- **`release-manual.yml`** — on a `v*` tag, or run manually for one submission. Attaches
-  the ready files to a GitHub Release, which is permanent and has a direct download URL.
-  Release assets live outside the git object database, so promoting a build never puts a
-  1.4 MB IDML into history — which is why builds are not committed to a branch instead.
-
-Neither can finish a manual: CI cannot run the JSX. Nothing is written back to the repo —
-`manuals/*/out/` is gitignored and no workflow commits or pushes.
-
 Or the same thing stage by stage:
 
 ```bash
 B=manuals/dm32/build
 python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUB.idml').extractall('$B')"
 
+python3 toolchain/normalize_input.py    $B   # only if the input has been built before
+python3 toolchain/standardize_kit.py    $B   # migrate a pre-standardisation document
 python3 toolchain/restyle_heading_levels.py $B   # apply number_from (no-op if undeclared)
 python3 toolchain/fix_numbering.py      $B   # join the numbered levels to manual_list
 python3 toolchain/sectionize.py         $B   # one <Section> per titles:lvl2 chapter
@@ -160,13 +154,122 @@ python3 toolchain/build_xref_boxes.py   $B --jsx   # suppress + log dead links, 
 python3 toolchain/validate_idml.py      $B
 python3 toolchain/repack.py             $B out.idml
 
-# then, in InDesign:
-#   open out.idml, run place_xref_boxes.jsx, export IDML
-python3 -c "import zipfile; zipfile.ZipFile('out_processed.idml').extractall('$B')"
-python3 toolchain/fix_underlines.py     $B   # InDesign reintroduces local underline overrides
-python3 toolchain/validate_idml.py      $B
-python3 toolchain/repack.py             $B final.idml
+# then, in InDesign: open out.idml, run place_xref_boxes.jsx, export IDML
+python3 toolchain/finish_manual.py      out_processed.idml   # -> out.final.idml
 ```
+
+## The loop: refining a book
+
+**The pipeline eats its own output.** Once a manual has been through InDesign you can
+export it and hand the export straight back to `build_manual.py` — edit content, add a
+chapter, re-pour a section, rebuild. Two ways out of an InDesign export, and the only
+difference is what happens to the margin boxes:
+
+```
+                submission.idml
+                      |
+      build_manual.py |                     <-- normalises first if the input
+                      v                         has been through here before
+                 ready.idml
+                      |
+    InDesign: place_xref_boxes.jsx, export IDML
+                      |
+        +-------------+--------------+
+        |                            |
+ finish_manual.py            build_manual.py
+   keeps the boxes             strips them and rebuilds
+        |                            |
+   final.idml                   ready.idml  ---> back to InDesign
+   (ship this)                  (revise again)
+```
+
+`build_manual.py` detects a processed input (margin boxes, per-chapter masters, more
+than one section) and runs `normalize_input.py` on it first. `--as-submission` skips the
+check; `--reprocess` forces it; `normalize_input.py <dir> --detect` reports without
+changing anything. The input no longer has to sit in `submissions/` — a file in
+`roundtrips/` or `out/` works, and config discovery still lands on the same
+`<product>.manual`.
+
+Three groups of forward stages, and only the third needs undoing:
+
+- **Already idempotent** — they replace their own output wholesale, so a re-run
+  converges by itself: `standardize_kit` renames only what still carries the old prefix,
+  `restyle_heading_levels` and `fix_numbering` set styles to the configured hierarchy,
+  `sectionize` replaces the whole `<Section>` run, `configure_chapters` regenerates the
+  strip and reconciles chapter masters to N, `apply_tabs` purges the previous `S<k>` set
+  before minting its own.
+- **Convergent by design, not undone** — a dead link (one whose target isn't in this
+  document) had its `link` style and `HyperlinkTextSource` removed on the first pass. It
+  is plain text now and no later pass sees it again. The audit log is the record. If a
+  suppression was wrong, fix the underlying link in InDesign; re-pouring won't resurrect it.
+- **Undone by `normalize_input.py`** — the margin boxes (frames, their margin stories,
+  their hyperlinks), the local `Underline*` overrides InDesign leaves when it anchors an
+  object, `<Hyperlink>` entries whose source no longer exists, and any master InDesign
+  renamed to break a duplicate identity (`A-BaseTabs`, `D-BaseTabs` beside `BT-BaseTabs`
+  — chapter masters from a pre-fix build, which no longer answer to the `S<k>` name
+  `apply_tabs` purges).
+
+Boxes are the one thing that *must* be undone: neither `build_xref_boxes.py` nor the JSX
+looks for a box that already exists, so a second pass would place a second box beside
+every word. `build_xref_boxes.py` now refuses a document that still has them rather than
+doubling up.
+
+This is enforced, not asserted:
+
+```bash
+python3 toolchain/test_reentrancy.py        # runs in CI on every build
+```
+
+It builds the tracked InDesign round-trip
+(`manuals/dm32/roundtrips/manual_template_test2_jsx_processed.idml` — 25 boxes, 2 renamed
+clone masters, 3 stale sections, 3 underline overrides), feeds the result back in, and
+repeats. Generation 1 is allowed to differ, since that is the pass that strips what
+InDesign left; from generation 2 on the fingerprint must not move — same story count,
+same 11 masters *by name*, same sections, hyperlinks, link ranges and tab swatches. Self
+ids are deliberately not compared: they are minted fresh every run and only have to be
+unique and lowercase-hex.
+
+That test is the tripwire for the failure mode that doesn't announce itself. A stage that
+adds instead of replacing never errors; it just leaves two of everything next time round.
+
+### Getting the build: a fixed URL
+
+Every push to `main` republishes the builds under a rolling **`latest`** tag, so each
+manual has one address that never changes and needs no login (the repo is public):
+
+```
+https://github.com/AmsteinGraphics/idml_testing/releases/download/latest/dm32.ready.idml
+https://github.com/AmsteinGraphics/idml_testing/releases/download/latest/dm42n.ready.idml
+```
+
+Paste it into a browser, `curl -L -O` it, or:
+
+```bash
+python3 toolchain/fetch_build.py            # every manual -> downloads/
+python3 toolchain/fetch_build.py dm32       # just one
+python3 toolchain/fetch_build.py --list     # what the release currently holds
+```
+
+The file is named after the **product**, not the submission, which is what keeps the URL
+fixed — a manual with several submissions aliases the one most recently touched in git,
+and the others stay reachable under their own names on the same release. The tag is
+force-moved to the commit that was built, so `latest` always means current `main`.
+
+CI runs the same `build_manual.py` you do, in two workflows:
+
+- **`build-manual.yml`** — on any change under `manuals/*/submissions/`, or under
+  `toolchain/` or `kit/` (which affect every manual). Builds each submission, fails if
+  one doesn't validate, refreshes the `latest` release, and still uploads a run artifact
+  as the per-run record (30 days) — which is all a pull request gets, since a PR must not
+  be able to redefine what `latest` points at.
+- **`release-manual.yml`** — on a `v*` tag, or run manually. Attaches the ready files to a
+  *named*, permanent release: `latest` is the moving target, a `v*` release is a state you
+  chose to keep.
+
+Release assets live outside the git object database, so republishing a 1.4 MB IDML on
+every push never grows the clone — which is why builds are not committed to a branch
+instead. Neither workflow can finish a manual: CI cannot run the JSX. Nothing is written
+back to the repo except the tag; `manuals/*/out/`, `dist/` and `downloads/` are gitignored.
 
 Order matters: `fix_numbering` must run before `sectionize` (section markers come from
 the numbered headings), `configure_chapters` needs the chapters detected, and
@@ -182,6 +285,10 @@ Things learned the hard way:
   never binds on import — InDesign drops or misplaces it. They have to be created
   natively, hence `--jsx` plus `place_xref_boxes.jsx`. Re-running the script rebuilds the
   whole set, so it's safe to iterate.
+- **A master lookup by name must be unambiguous.** `apply_tabs.py` and
+  `configure_chapters.py` used to take the first master matching "BaseTabs", which meant
+  that on a file carrying the renamed clones one tool rebuilt one strip while the other
+  read a different one. Both now refuse rather than choose.
 - **Uppercase hex `Self` ids crash InDesign 2026** and break anchor binding. Mint
   lowercase only.
 - **A master is identified by `NamePrefix` + `BaseName`**, not `Name`. Cloning a master
@@ -473,7 +580,9 @@ forward content pipeline (sections, tabs, oblique-ref boxes via JSX) · tab stri
 to 52/52 across all templates · style-driven underline enforcement · **InDesign 2026 crash
 fixed and confirmed** (duplicate master identity + frames sharing a story) · **chapter
 count fully parametric** — the strip is generated for whatever N the content has, and the
-grid is read from the kit rather than assumed.
+grid is read from the kit rather than assumed · **the pipeline is re-entrant** — its own
+output, InDesign round-trip included, is valid input, verified as a fixpoint · **every
+build of `main` lands on a fixed download URL** instead of a run artifact.
 
 Open:
 

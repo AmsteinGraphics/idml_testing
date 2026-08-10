@@ -6,7 +6,18 @@ name: Build manual
 #
 # It CANNOT finish the manual. Margin boxes have to be created natively by
 # place_xref_boxes.jsx inside InDesign (a hand-authored anchored frame never binds
-# on import), so the artifact here is the file to open and run that script on.
+# on import), so what comes out is the file to open and run that script on.
+#
+# EVERY BUILD OF main LANDS ON A FIXED URL. Run artifacts are zipped, expire, and
+# can only be reached by finding the run that made them; the `latest` release is a
+# single address per manual that never changes:
+#
+#   https://github.com/<owner>/<repo>/releases/download/latest/<product>.ready.idml
+#
+# The tag is force-moved to the commit that was built, so `latest` always means
+# "current main". Release assets live outside the git object database, so
+# republishing a 1.4 MB IDML on every push never grows the clone.
+# `toolchain/fetch_build.py` pulls them down without needing the URL by hand.
 
 on:
   push:
@@ -25,6 +36,9 @@ on:
         description: 'Path to one submission .idml (blank = every submission)'
         required: false
         default: ''
+
+permissions:
+  contents: write           # required to move the `latest` tag and its release
 
 jobs:
   build:
@@ -86,19 +100,119 @@ jobs:
           done < picked.txt
           exit $fail
 
+      # The pipeline is re-entrant, and that is easy to break silently: a stage
+      # that adds without replacing does not fail, it just leaves two of
+      # everything on the next run — two chapter master sets, two boxes per word.
+      # Three generations of the tracked InDesign round-trip catch that.
+      # Runs even when a submission failed above: this tests the TOOLCHAIN against a
+      # fixed fixture, so one manual's broken content must not stop it reporting.
+      - name: Re-entrancy fixpoint
+        if: '!cancelled()'
+        run: python3 toolchain/test_reentrancy.py
+
+      # One fixed name per manual, so the download URL never moves. The build is
+      # named after the SUBMISSION, which changes whenever a new one is poured; the
+      # alias is named after the PRODUCT, which doesn't. A manual with several
+      # submissions aliases the one most recently touched in git — that is the
+      # current draft, and the older ones stay reachable under their own names.
+      - name: Name a current build per manual
+        if: always() && steps.pick.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for d in manuals/*/; do
+            p=$(basename "$d")
+            newest=""; newest_t=0
+            for f in "$d"out/*.ready.idml; do
+              [ -e "$f" ] || continue
+              sub="manuals/$p/submissions/$(basename "${f%.ready.idml}").idml"
+              t=$(git log -1 --format=%ct -- "$sub" 2>/dev/null || echo 0)
+              [ -n "$t" ] || t=0
+              if [ "$t" -ge "$newest_t" ]; then newest_t=$t; newest="$f"; fi
+            done
+            [ -n "$newest" ] || continue
+            cp "$newest" "dist/$p.ready.idml"
+            log="${newest%.ready.idml}.xref_log.csv"
+            if [ -e "$log" ]; then cp "$log" "dist/$p.xref_log.csv"; fi
+            echo "$p -> $(basename "$newest")"
+          done
+          cp manuals/*/out/*.ready.idml manuals/*/out/*.xref_log.csv dist/ 2>/dev/null || true
+          ls -la dist
+
+      # Publishes whatever built, even when another manual failed — one manual with
+      # broken content must not withhold the others' download. The job still goes
+      # red, so the failure is not hidden; the difference is that a good build
+      # still reaches its URL. Only from the default branch: a pull request must
+      # not be able to redefine what `latest` points at, and a fork's token cannot
+      # write here anyway.
+      - name: Publish to the fixed `latest` URL
+        if: >
+          !cancelled() && steps.pick.outputs.count != '0'
+          && github.event_name != 'pull_request'
+          && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! ls dist/*.ready.idml >/dev/null 2>&1; then
+            echo "::warning::nothing built — leaving the previous \`latest\` in place"
+            exit 0
+          fi
+          # Move the tag to the commit actually built. `gh release edit --target`
+          # does not move an existing tag, so the tag is force-pushed first and the
+          # release then picks it up.
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
+
+          notes=$(mktemp)
+          {
+            echo "Automatic build of \`main\` @ \`${GITHUB_SHA:0:7}\`, refreshed on every push."
+            echo
+            echo "**Not finished manuals.** Each file has sections, tabs and dead-link"
+            echo "suppression applied and is the file to open in InDesign and run"
+            echo "\`toolchain/place_xref_boxes.jsx\` on. Then either \`finish_manual.py\`"
+            echo "to ship that state, or \`build_manual.py\` to revise and rebuild."
+            echo
+            echo "| manual | fixed URL |"
+            echo "|---|---|"
+            for f in dist/*.ready.idml; do
+              b=$(basename "$f")
+              echo "| \`$b\` | https://github.com/$GITHUB_REPOSITORY/releases/download/latest/$b |"
+            done
+          } > "$notes"
+
+          # --latest=false keeps the "Latest" badge for the v* releases that
+          # release-manual.yml promotes deliberately. It does not affect the URL
+          # used above, which names the tag outright rather than asking GitHub
+          # which release is newest.
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dist/* --clobber
+            gh release edit   latest --notes-file "$notes" --title "Latest build" --latest=false
+          else
+            gh release create latest dist/* --title "Latest build" --notes-file "$notes" --latest=false
+          fi
+
       - name: Summarise
         if: always() && steps.pick.outputs.count != '0'
         run: |
           {
             echo '### Ready for InDesign'
             echo
-            echo 'Open each file below, run `toolchain/place_xref_boxes.jsx`, export IDML,'
-            echo 'then finish with `fix_underlines.py` → `validate_idml.py` → `repack.py`.'
+            echo 'Open each file below, run `toolchain/place_xref_boxes.jsx`, then'
+            echo '`finish_manual.py` to ship it or `build_manual.py` to revise and rebuild.'
             echo
-            for f in manuals/*/out/*.ready.idml; do
-              [ -e "$f" ] && echo "- \`$f\`"
-            done
-            echo
+            if [ "${{ github.event_name }}" != 'pull_request' ] && [ "${{ github.ref }}" = 'refs/heads/main' ]; then
+              echo '**Fixed download URLs** (same address after every build):'
+              echo
+              for f in dist/*.ready.idml; do
+                [ -e "$f" ] || continue
+                b=$(basename "$f")
+                echo "- [\`$b\`](https://github.com/${{ github.repository }}/releases/download/latest/$b)"
+              done
+              echo
+              echo 'Or `python3 toolchain/fetch_build.py` to pull them all into `downloads/`.'
+              echo
+            fi
             for f in manuals/*/out/*.xref_log.csv; do
               [ -e "$f" ] || continue
               # --jsx defers box creation, so the action is jsx-box, not box
@@ -108,6 +222,7 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # kept as the per-run record — a pull request has no release to publish to
       - uses: actions/upload-artifact@v4
         if: always() && steps.pick.outputs.count != '0'
         with:
