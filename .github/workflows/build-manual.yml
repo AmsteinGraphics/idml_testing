@@ -73,8 +73,14 @@ jobs:
                || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
               git ls-files 'manuals/*/submissions/*.idml' > picked.txt
             else
+              # Anything that changes what a build PRODUCES rebuilds every manual:
+              # the toolchain and kit obviously, but also this workflow (which
+              # decides what gets published) and any manual's config. Matching only
+              # toolchain/kit meant a workflow change triggered a run that then
+              # picked nothing and skipped every step after it — a green tick for
+              # doing nothing at all.
               if git diff --name-only "$BASE" "${{ github.sha }}" \
-                   | grep -qE '^(toolchain|kit)/'; then
+                   | grep -qE '^(toolchain|kit|\.github/workflows)/|^manuals/[^/]+/[^/]+\.manual$'; then
                 git ls-files 'manuals/*/submissions/*.idml' > picked.txt
               else
                 git diff --name-only "$BASE" "${{ github.sha }}" \
