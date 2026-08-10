@@ -95,6 +95,25 @@ Now export IDML again. You have two choices, and this is the important bit:
 | **Ship this** | `python3 toolchain/finish_manual.py your-export.idml` | `your-file.final.idml` — tidied up, boxes kept |
 | **Keep editing** | `python3 toolchain/build_manual.py your-export.idml` | a fresh `.ready.idml` — go back to step 3 |
 
+> ### ⚠ A finished manual has no permanent home yet
+>
+> `.final.idml` lands in `manuals/<product>/out/`, which is **not tracked by git and not
+> backed up.** It sits there looking identical to a throwaway build, and it disappears if
+> you clear the folder or re-clone.
+>
+> So when you make a final you actually care about, do one of these **before you walk
+> away**:
+>
+> - copy it somewhere outside the repo, or
+> - attach it to a release: `gh release create v1.0 path/to/your-file.final.idml`
+>
+> This is a deliberate gap, not an oversight — where finals should live depends on
+> whether they need sharing or only archiving, whether each should be pinned to a
+> version, and whether the real deliverable turns out to be a PDF rather than an IDML.
+> Building a home for them before that is known would probably build the wrong one.
+> Decide it when you have a final you care about; it is a directory and a few lines of
+> workflow whenever you want it.
+
 ---
 
 ## Going round again
