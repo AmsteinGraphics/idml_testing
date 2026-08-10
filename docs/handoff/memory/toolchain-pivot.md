@@ -5,11 +5,12 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b84fab6b-278f-44c5-9fb3-3dc4c4901651
+  modified: 2026-08-10T19:46:04.114Z
 ---
 
 `manual_template_nosection.idml` (added 2026-08-04) is the canonical hand-authored EMPTY kit — the real starting point before content is poured. It supersedes the old `make_template.py → prune → bake_masters` reverse-engineering path (that DERIVED a kit from the shipped manual; nosection IS the kit, authored natively).
 
-Contents of the kit: 7 named masters (B-Base, BT-BaseTabs, NT-NavTabs, Sx-Section, C-Contents, I-Index, N-Notes), 45 para / 42 char / 23 object styles, palette Black + PANTONE 292 U / 130 U / Warm Gray 1 U, **24 pre-baked mixed-ink `tab_01..tab_24` swatches** in Graphic.xml (tab gradient already solved, no .ai dependency), full layer stack, xref engine present (formats `dm32_cross_ref`/`dm32_cross_par`) but zero destinations/links.
+Contents of the kit: 7 named masters (B-Base, BT-BaseTabs, NT-NavTabs, Sx-Section, C-Contents, I-Index, N-Notes), 45 para / **36** char (was 42; six dead styles pruned 2026-08-10, see [[swisskeys-encoding]]) / 23 object styles, palette Black + PANTONE 292 U / 130 U / Warm Gray 1 U, **24 pre-baked mixed-ink `tab_01..tab_24` swatches** in Graphic.xml (tab gradient already solved, no .ai dependency), full layer stack, xref engine present (formats `dm32_cross_ref`/`dm32_cross_par`) but zero destinations/links.
 
 Goal: the toolchain now does the heavy lifting on poured content — per-section template creation & application, tab creation for N chapters, oblique-ref margin boxes (underlined word ↔ ref target). See [[section-master-conventions]].
 

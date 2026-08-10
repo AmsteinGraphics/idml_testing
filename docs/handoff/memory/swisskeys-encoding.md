@@ -1,38 +1,85 @@
 ---
 name: swisskeys-encoding
-description: "How DM32 v1.76 actually encodes SwissKeys buttons and LCD text — styles, which carry ‹ › delimiters, and the special-glyph inventory"
+description: "How DM32 encodes SwissKeys buttons and LCD text — the two lcd_* trees, the three delimiter conventions, and the special-glyph inventory"
 metadata: 
   node_type: memory
   type: reference
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-10T15:57:31.834Z
+  modified: 2026-08-10T19:45:29.028Z
 ---
 
-Surveyed from `manuals/dm32/dm32_print_manual_v1.76.idml` on 2026-08-10 (2323 stories). Expensive to re-derive, so recorded here. All these character styles exist in `kit/manual_kit.idml` and in the DM42n submission too.
+Surveyed from `manuals/dm32/dm32_print_manual_v1.76.idml` (2323 stories), re-measured 2026-08-10.
+Expensive to re-derive, so recorded here.
 
-| style | font | runs in v1.76 | content wrapped in `‹ ›`? |
-|---|---|---|---|
-| `btn_normal` | SwissKeys Buttons (negative, white on black) | 1430 | **1348 yes** |
-| `letter_normal` | SwissKeys **Letters** | 215 | **192 yes** |
-| `btn_or` / `btn_bl` | inherit SwissKeys, set only a fill colour | 479 / 405 | **0 — never** |
-| `code_styles:lcd_sk` / `_high` / `_slant` / `_slant_high` | SwissKeys Raster | 699 / 224 / 96 / 30 | 0 |
-| `code_styles:code_sk` | SwissKeys Raster (program listings) | 791 | 0 |
+**Counting warning:** table cells nest `ParagraphStyleRange` inside `ParagraphStyleRange`, so a
+walk that iterates per-PSR counts cell content TWICE (it inflated `btn_normal` from 1440 to 2106).
+Iterate `CharacterStyleRange` once from the story root. Any transform has the same trap.
 
-Also present: `btn_normal_table`, `btn_or_table`, `btn_bl_table` (table-sized variants), `shift_orange`, `shift_blue` (used only ~20× each, on the `‹`/`›` delimiters themselves in a rare construction).
+## THREE delimiter conventions, not one
 
-**THE KEY FACT: `‹ ›` are not universal delimiters.** They belong to the negative button font and the letter font only. Shifted buttons and LCD text carry bare content. Any transform must insert them for `btn_normal`/`letter_normal` and never for the others.
+This is the key fact. A transform must apply the right one per style:
 
-**Style chain** (already correct for what the toolchain needs): `btn` (SwissKeys) → `btn_normal` (Buttons) → `letter_normal` (Letters), `shift_orange`, `shift_blue`; and `btn` → `btn_or`, `btn_bl` which override **only** FillColor. So "shifted button = original font in the shift colour" is already modelled — a one-shift manual like DM42n needs one such style.
+| convention | styles | evidence in v1.76 |
+|---|---|---|
+| wrapped in `‹ ›` | `btn_normal`, `letter_normal` | 1194/1440 and 147/220 (strict both-ends) |
+| padded with NBSP | `lcd_normal`, `lcd_table` | 72/91 and 23/24 |
+| bare content | `lcd_sk*`, `code_sk`, `btn_or`, `btn_bl` | lcd_sk 28/736 |
 
-**`[C]` is genuinely ambiguous:** `C` appears 67× as `btn_normal` (the Clear key) while single letters also appear as `letter_normal` (`‹Q›`, `‹A›`, `‹F›`). No rule can resolve a bare single letter.
+Shifted buttons and LCD text carry bare content — `‹ ›` belong to the negative-button font and
+the letters font only.
+
+## The lcd_* prefix is TWO unrelated trees
+
+**Tree A — root `code_styles:lcd_normal`, Gintronic Regular 7.5, NBSP-padded labels.** Note this
+is byte-identical in appearance to `code_styles:inline_codeblock` — it is the code font wearing an
+LCD name, and does NOT match the calculator's real LCD. The user may swap its font later.
+- `lcd_normal` (91 runs) — mode annunciators: `␣BIN␣` `␣DEG␣` `␣EQN␣` `␣A..Z␣` `␣RAD␣` `␣GRAD␣`
+- `lcd_table` (24) — soft-menu labels `␣New␣` `␣Load␣` `␣Save␣` `␣Info␣`; 24/24 inside table cells
+- `lcd_dings` (15) — Wingdings 3, private-use `U+F081`/`U+F082`; overrides font, INHERITS size 7.5
+- `lcd_slant` (1) — italic, effectively unused
+
+**Tree B — root `code_styles:lcd_sk`, SwissKeys Raster 10.4, bare content.** The real LCD.
+- `lcd_sk` (736) — display text: `RUNNING` `ALL` `Y` `Cn,r`
+- `lcd_sk_high` (244) — inverse/cursor: `█` `_` `SQRT` `NULL`
+- `lcd_sk_slant` (97) — italic placeholders: `nnnn` `n` `option`
+- `lcd_sk_slant_high` (30) — `variable` `label`
+- sibling `code_styles:code_sk` (791) — same font/size, program listings, para style `prgm_listing`
+
+Buttons: `btn` (SwissKeys 9.5) → `btn_normal` (Buttons, 1440) → `letter_normal` (Letters, 220),
+`shift_orange`, `shift_blue`; and `btn` → `btn_or` (533) / `btn_bl` (430) which override **only**
+FillColor. So "shifted button = original font in the shift colour" is already modelled.
+
+## PRUNED 2026-08-10 — do not expect these to exist
+
+Six styles were defined but had ZERO runs anywhere; removed from `kit/manual_kit.idml`
+(42 → 36 character styles), commit on main. They were leftovers from the design-system
+development stage per the user:
+`lcd_exponent`, `lcd_greek`, `lcd_cursor_block`, `btn_normal_table`, `btn_or_table`, `btn_bl_table`.
+
+The `btn_*_table` variants were never applied — buttons inside tables use plain `btn_normal`
+(666 of its runs are in cells). `lcd_table` is NOT dead and stays.
+
+**No rule maps "inside a table" to a style.** Inside cells you find both `lcd_table` (24) and
+`lcd_normal` (11), so table-context cannot be inferred — `lcd_table` needs explicit markup.
+
+## Still true, and awkward
+
+**`[C]` is genuinely ambiguous:** `C` appears 67× as `btn_normal` (the Clear key) while single
+letters also appear as `letter_normal` (`‹Q›`, `‹A›`, `‹F›`). No rule resolves a bare single
+letter — hence the `[[A]]` markup for letter keys.
 
 **Special glyphs needing a mapping table** (non-ASCII actually used):
-`Σ • × ÷ ← √ – ± ⅟ ↓ ˣ → ▼ ▲ ² ⎷ Θ π ∫ ↑ σ ° ⭳ ⮀ ⭱ █ ¯ ᴇ χ ≤ ≥ ≠ · … ŷ ȳ Χ`, plus U+2009 THIN SPACE and U+00A0 NBSP used meaningfully for spacing.
+`Σ • × ÷ ← √ – ± ⅟ ↓ ˣ → ▼ ▲ ² ⎷ Θ π ∫ ↑ σ ° ⭳ ⮀ ⭱ █ ¯ ᴇ χ ≤ ≥ ≠ · … ŷ ȳ Χ`, plus U+2009 THIN
+SPACE and U+00A0 NBSP used meaningfully. The map must be keyed PER FONT — Gintronic and SwissKeys
+Raster have different repertoires, which is what makes the lcd_normal font swap risky.
 
-**Two pre-existing defects found in v1.76, not caused by this repo:**
-- 27 × `U+FFFD` REPLACEMENT CHARACTER inside `btn_bl` — a glyph lost before this repo existed; those buttons print something wrong today.
-- One button name is stored as an astral-plane character reference (`&#x1d63a;ˣ`, U+1D63A), so any glyph map must handle non-BMP codepoints rather than assuming one char per glyph.
+**Two pre-existing defects in v1.76, not caused by this repo:**
+- 27 × `U+FFFD` inside `btn_bl` — a glyph lost before this repo existed; those buttons print
+  something wrong today.
+- One button name is an astral-plane character reference (`&#x1d63a;ˣ`, U+1D63A), so a glyph map
+  must handle non-BMP codepoints.
 
-Naming wart: `btn_or` / `btn_bl` are product-specific (orange/blue) inside a kit that is otherwise product-neutral — candidates for `btn_shift1`/`btn_shift2` with the colour from config, the way the tab ramp works.
+Naming wart: `btn_or`/`btn_bl` are product-specific (orange/blue) inside a product-neutral kit —
+agreed to become `btn_shift1`/`btn_shift2` with the colour from config, like the tab ramp.
 
 See [[key-markup-proposal]] for the feature this was surveyed for.

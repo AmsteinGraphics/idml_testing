@@ -26,18 +26,21 @@ plain text and the toolchain converts them into the real SwissKeys character sty
 `normalize_input.py` reversing the transform so the pipeline stays re-entrant. The design
 is agreed. It is **not** started — no `apply_key_markup.py` exists.
 
-**Three questions were open and unanswered when the session ended.** They are listed in
-`memory/key-markup-proposal.md`, and they gate the syntax, not the architecture:
+**The syntax and architecture are settled as of 2026-08-10** — see
+`memory/key-markup-proposal.md` for both. Two decisions matter most:
 
-1. Letter keys — is `[[A]]` acceptable, or should each manual list its letter keys in
-   config? (`[C]` cannot be resolved by rule: Clear key vs letter C.)
-2. Second shift colour — `<<NAME>>`, or a prefix like `<b:NAME>`? DM32 has two shift
-   colours, DM42n has one.
-3. `_table` style variants — automatic inside a table, or explicit markup?
+- **Forward-only and idempotent.** There is no reverse transform. Markup is write-once:
+  typed, rendered, and it stays rendered; the rendered IDML is the state and the feedback.
+  `f(f(x)) = f(x)` because a rendered run contains no markup left to match. Watch the two
+  wrinkles recorded there — escapes need a `no_markup` style or they re-render, and
+  InDesign splits runs mid-token.
+- **`_table` variants are explicit, never inferred.** Table context does not determine the
+  style; cells contain both `lcd_table` and `lcd_normal`.
 
-Ask those three before writing code. The encoding facts the feature rests on are in
-`memory/swisskeys-encoding.md` — that survey cost a full pass over 2323 stories in
-`manuals/dm32/dm32_print_manual_v1.76.idml` and is expensive to re-derive.
+The encoding facts the feature rests on are in `memory/swisskeys-encoding.md` — that survey
+cost a full pass over 2323 stories in `manuals/dm32/dm32_print_manual_v1.76.idml` and is
+expensive to re-derive. Read its counting warning before writing any walker: table cells
+nest `ParagraphStyleRange`, so a naive walk processes cell content twice.
 
 ## Also open, and easy to lose
 
