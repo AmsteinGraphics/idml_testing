@@ -31,3 +31,12 @@ tab_stop = PANTONE 130 U, Black
 
 # Sections number straight through the parts: a Part is a label, not a counter.
 number_from = 2
+
+# Which parts of the kit are AUTHORITATIVE for a manual: masters, styles, swatches
+# (comma-separated). A poured document owns a private copy of the design system and
+# nothing links it back, so a later kit change reaches new pours only. Declaring this
+# re-transplants those parts on every build, making the kit the source of truth.
+# Undeclared, sync_from_kit.py only reports what has drifted. Opt in per manual --
+# overwriting a book's masters is not something to do by surprise, so this default
+# is deliberately NOT inherited as "on".
+sync = masters
