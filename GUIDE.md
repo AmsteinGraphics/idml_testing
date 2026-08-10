@@ -156,7 +156,14 @@ python3 toolchain/fetch_build.py          # everything, into downloads/
 python3 toolchain/fetch_build.py dm32     # just one
 ```
 
-Bookmark the URL. It is the same one tomorrow.
+One file per manual, named after the product — bookmark it, it is the same one tomorrow.
+If a manual has several submissions, the one published is the most recently updated; the
+others are still in the repo and rebuild on demand.
+
+> **Export IDML, not InDesign's own format.** `.indd` is what the Save dialog offers by
+> default, but the toolchain reads and writes IDML only, and a `.indd` is roughly ten
+> times the size. They are ignored by the repository now, so saving one by accident is
+> harmless — it just won't do anything.
 
 ---
 
@@ -225,6 +232,7 @@ the tab strip is rebuilt to match every time.
 | `finish_manual.py FILE.idml` | tidy up an InDesign export and call it done |
 | `fetch_build.py` | download the current build |
 | `resolve_xref.py --audit` | report on the cross-reference system |
+| `sync_from_kit.py DIR` | what has drifted from the kit (`build_manual.py` runs it for you) |
 
 Two more take an *unpacked* folder rather than an `.idml`, so they're for when something
 has gone wrong and you're poking at the innards:

@@ -114,11 +114,12 @@ jobs:
           # yet -- the transplant rewrites every master and must still converge
           python3 toolchain/test_reentrancy.py --sync
 
-      # One fixed name per manual, so the download URL never moves. The build is
-      # named after the SUBMISSION, which changes whenever a new one is poured; the
-      # alias is named after the PRODUCT, which doesn't. A manual with several
-      # submissions aliases the one most recently touched in git — that is the
-      # current draft, and the older ones stay reachable under their own names.
+      # ONE file per manual, named after the PRODUCT. The build is named after the
+      # SUBMISSION, which changes whenever a new one is poured, so publishing under
+      # that name gives a moving URL and a release that accumulates every draft
+      # anyone ever built. A manual with several submissions publishes the one most
+      # recently touched in git — the current draft. The others stay in the repo and
+      # rebuild on demand; they are not a download anybody wants.
       - name: Name a current build per manual
         if: always() && steps.pick.outputs.count != '0'
         run: |
@@ -140,7 +141,6 @@ jobs:
             if [ -e "$log" ]; then cp "$log" "dist/$p.xref_log.csv"; fi
             echo "$p -> $(basename "$newest")"
           done
-          cp manuals/*/out/*.ready.idml manuals/*/out/*.xref_log.csv dist/ 2>/dev/null || true
           ls -la dist
 
       # Publishes whatever built, even when another manual failed — one manual with
@@ -192,6 +192,16 @@ jobs:
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest dist/* --clobber
             gh release edit   latest --notes-file "$notes" --title "Latest build" --latest=false
+            # Drop anything the release still carries that this build did not
+            # produce: a renamed manual, or the per-submission copies published
+            # before the naming was trimmed. Without this the release only ever
+            # grows, and a stale asset at a live URL is worse than no asset.
+            for a in $(gh release view latest --json assets -q '.assets[].name'); do
+              if [ ! -e "dist/$a" ]; then
+                echo "pruning stale asset: $a"
+                gh release delete-asset latest "$a" --yes
+              fi
+            done
           else
             gh release create latest dist/* --title "Latest build" --notes-file "$notes" --latest=false
           fi

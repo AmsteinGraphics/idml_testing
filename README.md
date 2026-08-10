@@ -332,10 +332,15 @@ python3 toolchain/fetch_build.py dm32       # just one
 python3 toolchain/fetch_build.py --list     # what the release currently holds
 ```
 
-The file is named after the **product**, not the submission, which is what keeps the URL
-fixed — a manual with several submissions aliases the one most recently touched in git,
-and the others stay reachable under their own names on the same release. The tag is
-force-moved to the commit that was built, so `latest` always means current `main`.
+The release carries **one file per manual**, named after the *product*, and that is what
+keeps the URL fixed: a build is named after the submission, which changes whenever a new
+one is poured. A manual with several submissions publishes the one most recently touched
+in git — the current draft. The others stay in the repo and rebuild on demand; they are
+not a download anybody wants, and publishing them makes a release that only ever grows.
+
+Assets the current build did not produce are pruned on every run, so a renamed manual
+leaves nothing stale behind at a live URL. The tag is force-moved to the commit that was
+built, so `latest` always means current `main`.
 
 CI runs the same `build_manual.py` you do, in two workflows:
 
@@ -346,7 +351,8 @@ CI runs the same `build_manual.py` you do, in two workflows:
   be able to redefine what `latest` points at.
 - **`release-manual.yml`** — on a `v*` tag, or run manually. Attaches the ready files to a
   *named*, permanent release: `latest` is the moving target, a `v*` release is a state you
-  chose to keep.
+  chose to keep. It publishes per-submission names, which is right there — a kept state
+  should record exactly what was built.
 
 Release assets live outside the git object database, so republishing a 1.4 MB IDML on
 every push never grows the clone — which is why builds are not committed to a branch

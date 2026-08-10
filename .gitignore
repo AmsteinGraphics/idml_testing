@@ -2,6 +2,11 @@
 *.idlk
 ~*.idlk
 
+# InDesign's own format. The toolchain reads and writes IDML only, so a .indd here
+# is the Save dialog's default rather than a decision — and it is ~13 MB a time.
+# Export IDML instead; that is what a submission is.
+*.indd
+
 # Python
 __pycache__/
 *.pyc
