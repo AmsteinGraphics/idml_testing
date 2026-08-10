@@ -5,6 +5,25 @@ The full technical reference is [README.md](README.md).
 
 ---
 
+## Where the work happens: on your machine
+
+Clone the repo and run everything locally. The toolchain is plain Python with no
+dependencies, it takes seconds, and **only your machine has InDesign** — which step 3
+below needs. Mill locally, look at the result, iterate until you're happy, and push when
+you are.
+
+What you push is the **submission** (the IDML you exported from InDesign) and any config
+change — not the build. Builds are not committed: they are reproducible from the
+submission, and a 1.4 MB file per attempt would bloat the repository forever.
+
+GitHub then does two things, neither of which is milling:
+
+- **checks** that your submission survives the pipeline on a clean machine, so a file that
+  only worked because of something on your disk gets caught;
+- **publishes** the result at a fixed URL, so someone without the repo can download it.
+
+It cannot finish a manual — no InDesign, so it cannot run the JSX in step 3.
+
 ## What this thing is for
 
 You write and lay out the manual in InDesign. But a few jobs are miserable by hand and
@@ -127,6 +146,10 @@ Three things worth knowing before you switch it on:
   head with custom text, say), that keeps working — the transplant deliberately preserves
   the identity of every item a page points at. If a kit change would break one, the build
   stops and tells you which, rather than doing it.
+- **Layers are matched by name.** Guides and items land on the layer of the same name they
+  were on in the kit, and a layer the kit has that your manual doesn't is created. (Matched
+  by name because the same layer has a different internal id in every document — matching
+  on the id sent every `guide_*` layer's guides onto `foot`.)
 - **What the master needs comes with it.** New styles, colours and text variables the
   master references are brought across automatically. **Fonts are not** — the build tells
   you which are missing and you install and add them yourself.

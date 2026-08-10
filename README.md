@@ -270,6 +270,19 @@ and **before `configure_chapters`** (which re-tweens the strip the kit hands ove
 manual's own ink ramp — otherwise the kit's 292 ramp would land in a manual that has no
 292).
 
+### Layers are matched by name
+
+A page item's `ItemLayer` is the commonest reference in the file, and the ids do **not**
+agree between two documents cut from the same original — the kit's `foot` is `ub8` where
+a poured document's is `uba`, and every `guide_*` layer is offset the same way. So layers
+are matched by **name**, and a layer the kit has that the document lacks is created.
+
+This one is worth dwelling on because of *how* it failed. InDesign does not reject an item
+naming a layer that isn't there — it silently puts it on the first layer. An unmapped
+transplant therefore arrived with ten `guide_*` layers' worth of guides flattened onto
+`foot`: no error, no warning, just a document quietly wrong. `validate_idml.py` check 6b
+now catches it.
+
 ### Why it is not a file copy
 
 A document page that overrides a master item stores **the master item's id** in the page's
@@ -284,10 +297,11 @@ naming them — `--force` to proceed anyway.
 
 Two more things that are not obvious:
 
-- **Cross-master references.** A master can be based on another master, so `AppliedMaster`
-  points out of the file. The whole kit→document master map is resolved *before* any
-  transplant runs; without that, B-Base arrives pointing at a kit id this document has
-  never heard of.
+- **Three kinds of reference leave the file**, so no master can be rewritten until every
+  master's mapping is known — planning and writing are separate passes for that reason
+  alone. `ItemLayer` points at a layer in designmap; `AppliedMaster` at another master,
+  when one is based on another; and `OverrideList` at items belonging to *another* master,
+  when a master overrides what it inherits. Each of these was a bug found the hard way.
 - **Stories are matched through their frames**, not by id — a story id is a reference,
   never a `Self` inside the master. Keying it off the item map never matches, so every
   build would mint a fresh set and churn `StoryList` on a run that changed nothing. Going
@@ -377,6 +391,10 @@ Things learned the hard way:
   `configure_chapters.py` used to take the first master matching "BaseTabs", which meant
   that on a file carrying the renamed clones one tool rebuilt one strip while the other
   read a different one. Both now refuse rather than choose.
+- **An item naming a layer that doesn't exist is not an error to InDesign.** It puts it on
+  the first layer instead. So moving page items between documents means mapping `ItemLayer`
+  by layer *name*, and the failure mode if you don't is silent: everything lands on one
+  layer and the file still opens. Enforced as check 6b in `validate_idml.py`.
 - **Uppercase hex `Self` ids crash InDesign 2026** and break anchor binding. Mint
   lowercase only.
 - **A master is identified by `NamePrefix` + `BaseName`**, not `Name`. Cloning a master

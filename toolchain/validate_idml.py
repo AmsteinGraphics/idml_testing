@@ -118,6 +118,23 @@ for f in layout:
             bad_master.add(mid)
 check(not bad_master, f"AppliedMaster -> missing master: {sorted(bad_master)[:5]}")
 
+# ---- 6b. ItemLayer refs resolve -------------------------------------------
+# The commonest reference in the file — every page item carries one — and the
+# one that fails most quietly: InDesign does not reject an item naming a layer
+# that isn't there, it silently puts it on the first layer. That is what a
+# master transplant did to ten guide_* layers, flattening every guide onto
+# `foot`, and nothing here noticed because nothing looked.
+layer_ids = {m.group(1) for m in
+             re.finditer(r'<Layer\b[^>]*?\bSelf="([^"]+)"', reads(os.path.join(D, "designmap.xml")))}
+bad_layer = {}
+for f in layout:
+    for lid in re.findall(r'ItemLayer="([^"]+)"', reads(f)):
+        if lid not in layer_ids:
+            bad_layer[lid] = bad_layer.get(lid, 0) + 1
+check(not bad_layer,
+      f"ItemLayer -> missing layer (items land on the first layer, silently): "
+      f"{sorted(bad_layer.items(), key=lambda kv: -kv[1])[:5]}")
+
 # ---- 7. Section PageStart resolves ----------------------------------------
 for ch in dm:
     if local(ch.tag) == "Section":

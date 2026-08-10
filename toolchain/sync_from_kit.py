@@ -86,6 +86,63 @@ def self_sequence(xml):
             for m in re.finditer(r'<(\w+)\b[^>]*?\bSelf="([^"]+)"', xml)]
 
 
+def layers(designmap_xml):
+    """[(Self, Name)] in designmap order, which is the layer stacking order."""
+    return [(m.group(1), m.group(2)) for m in
+            re.finditer(r'<Layer\b[^>]*?\bSelf="([^"]+)"[^>]*?\bName="([^"]*)"',
+                        designmap_xml)]
+
+
+def map_layers(build, kit, mint, report, dry_run):
+    """{kit layer Self: this document's layer Self}, matched by NAME.
+
+    Layers are the reference a master makes most often — every page item carries
+    ItemLayer — and the ids do not agree between two documents cut from the same
+    original: the kit's `foot` is ub8 where a poured document's is uba, and every
+    guide layer is offset the same way. Left unmapped, a transplanted item names a
+    layer that does not exist here, and InDesign drops all of them onto the first
+    layer. That is how ten `guide_*` layers arrive flattened into `foot`.
+
+    A layer the kit has and the document does not is created, so a new guide layer
+    in the kit arrives as a layer rather than as loose items.
+    """
+    dp = os.path.join(build, "designmap.xml")
+    d = open(dp, encoding="utf-8").read()
+    k_dm = kit.read("designmap.xml")
+    k_layers, d_layers = layers(k_dm), layers(d)
+    by_name = {n: s for s, n in d_layers}
+
+    mapping, created = {}, []
+    for k_self, name in k_layers:
+        if name in by_name:
+            mapping[k_self] = by_name[name]
+        else:
+            new = mint()
+            mapping[k_self] = new
+            blk = block_for(k_dm, "Layer", k_self)
+            if blk:
+                created.append((name, blk.replace(f'Self="{k_self}"', f'Self="{new}"')))
+
+    if created:
+        report.append(f"    + {len(created)} layer(s): "
+                      + ", ".join(n for n, _ in created))
+        if not dry_run:
+            # keep them with the other layers, so stacking order stays sane
+            last = None
+            for m in re.finditer(r'[ \t]*<Layer\b[^>]*?(?:/>|</Layer>)[ \t]*\n?', d):
+                last = m
+            add = "".join(b for _, b in created)
+            d = d[:last.end()] + add + d[last.end():] if last else \
+                d.replace("</Document>", add + "</Document>")
+            open(dp, "w", encoding="utf-8").write(d)
+
+    moved = sum(1 for k, v in mapping.items() if k != v)
+    if moved:
+        report.append(f"    {moved} layer id(s) differ between kit and document — "
+                      f"remapped by name")
+    return mapping
+
+
 def frame_stories(xml):
     """{item Self: the story it owns} for every element carrying a ParentStory."""
     out = {}
@@ -297,19 +354,24 @@ def pull_dependencies(build, kit, added_xml, report, dry_run):
 
 
 # --------------------------------------------------------------------------- #
-def transplant(build, kit, key, k_master, d_master, mint, report, dry_run,
-               master_ids=None):
-    """Replace one document master with the kit's, keeping the document's ids.
+def plan_master(k_master, d_master, mint):
+    """Work out one master's id mapping WITHOUT writing anything.
 
-    Returns (added_xml, new_story_ids, dropped_story_ids). The mapping is by tag
-    and position: the Nth <TextFrame> of the kit master becomes the Nth
-    <TextFrame> of the document's. That is predictable and explains itself in the
-    report; items the kit adds get fresh ids, items it no longer has go away.
+    Planning is separated from writing because a master's references are not all
+    local. Three kinds cross the file boundary, and every one of them was a bug
+    found the hard way:
 
-    `master_ids` maps EVERY kit master's Self to its counterpart here, not just
-    this one's. A master can be based on another master, and B-Base's AppliedMaster
-    is a reference out of this file — without the cross-master map the transplant
-    lands pointing at a kit id this document has never heard of.
+      ItemLayer      -> a Layer in designmap. The commonest reference of all —
+                        every page item has one — and the ids do not agree between
+                        two documents cut from the same original.
+      AppliedMaster  -> another master, when one is based on another.
+      OverrideList   -> items belonging to ANOTHER master, when a master overrides
+                        what it inherits.
+
+    So no master can be rewritten until every master's mapping is known. The
+    per-master part is positional: the Nth <TextFrame> of the kit master becomes
+    the Nth <TextFrame> of the document's, which is predictable and explains itself
+    in the report. Items the kit adds get fresh ids; items it no longer has go.
     """
     k_seq, d_seq = self_sequence(k_master["xml"]), self_sequence(d_master["xml"])
     pos = {}
@@ -353,40 +415,42 @@ def transplant(build, kit, key, k_master, d_master, mint, report, dry_run,
     new_ids = [v for v in story_map.values() if v not in d_stories]
     dropped_stories = sorted(d_stories - set(story_map.values()))
 
-    # cross-master references (AppliedMaster) resolve through the global map; this
-    # master's own entry agrees with the positional match above, so they compose
-    for k_self, d_self in (master_ids or {}).items():
-        mapping.setdefault(k_self, d_self)
+    return dict(mapping=mapping, story_map=story_map, new_ids=new_ids,
+                dropped_stories=dropped_stories, items=len(k_seq), minted=minted,
+                dropped_items=len(dropped_items))
 
-    new_master = remap(k_master["xml"], mapping)
+
+def write_master(build, kit, plan, k_master, d_master, gmap, report, dry_run):
+    """Rewrite one master and its stories using the GLOBAL id map."""
+    new_master = remap(k_master["xml"], gmap)
     # the document keeps its own master Self, so every AppliedMaster pointing at
     # it — on pages and on masters based on it — is untouched by construction
     new_master = re.sub(r'(<MasterSpread\b[^>]*?\bSelf=")[^"]*(")',
                         rf'\g<1>{d_master["self"]}\g<2>', new_master, count=1)
 
     story_files = []
-    for k_sid, d_sid in sorted(story_map.items()):
+    for k_sid, d_sid in sorted(plan["story_map"].items()):
         sx = kit.story(k_sid)
         if sx is None:
             report.append(f"    ! kit story {k_sid} missing from the kit package")
             continue
-        story_files.append((d_sid, remap(sx, mapping)))
+        story_files.append((d_sid, remap(sx, gmap)))
 
-    report.append(f"  {d_master['name']}: {len(k_seq)} items "
-                  f"({minted} new, {len(dropped_items)} dropped), "
-                  f"{len(story_files)} stories ({len(new_ids)} new, "
-                  f"{len(dropped_stories)} dropped)")
+    report.append(f"  {d_master['name']}: {plan['items']} items "
+                  f"({plan['minted']} new, {plan['dropped_items']} dropped), "
+                  f"{len(story_files)} stories ({len(plan['new_ids'])} new, "
+                  f"{len(plan['dropped_stories'])} dropped)")
 
     if not dry_run:
         open(d_master["path"], "w", encoding="utf-8").write(new_master)
         for sid, sx in story_files:
             open(os.path.join(build, "Stories", f"Story_{sid}.xml"), "w",
                  encoding="utf-8").write(sx)
-        for sid in dropped_stories:
+        for sid in plan["dropped_stories"]:
             p = os.path.join(build, "Stories", f"Story_{sid}.xml")
             if os.path.exists(p):
                 os.remove(p)
-    return new_master + "".join(x for _, x in story_files), new_ids, dropped_stories
+    return new_master + "".join(x for _, x in story_files)
 
 
 def register_stories(build, new_ids, dropped_ids):
@@ -434,16 +498,29 @@ def sync(build, kit_path=DEFAULT_KIT, parts=(), dry_run=False, force=False):
 
     before = overridden_ids(build)
     mint = minter(build, kit.read("designmap.xml"))
-    # every kit master Self -> the id it will have here, resolved before any
-    # transplant runs so AppliedMaster references between masters stay valid
-    master_ids = {K[k]["self"]: D[k]["self"] for k in matched}
+
+    # ---- PLAN: every mapping resolved before a single file is rewritten ------
+    # Masters reference each other (AppliedMaster), each other's items
+    # (OverrideList on an inherited item) and the document's layers (ItemLayer).
+    # Rewriting one master at a time with only its own map left all three
+    # pointing at kit ids — which is how ten guide_* layers ended up flattened
+    # into `foot`: the layer named there did not exist, so InDesign put every
+    # orphaned item on the first layer it had.
+    gmap = {K[k]["self"]: D[k]["self"] for k in matched}
+    gmap.update(map_layers(build, kit, mint, report, dry_run))
+    plans = {}
+    for key in matched:
+        p = plan_master(K[key], D[key], mint)
+        plans[key] = p
+        gmap.update(p["mapping"])
+
+    # ---- WRITE --------------------------------------------------------------
     added_xml, new_ids, dropped_ids = "", [], []
     for key in matched:
-        a, n, dr = transplant(build, kit, key, K[key], D[key], mint, report, dry_run,
-                              master_ids)
-        added_xml += a
-        new_ids += n
-        dropped_ids += dr
+        added_xml += write_master(build, kit, plans[key], K[key], D[key], gmap,
+                                  report, dry_run)
+        new_ids += plans[key]["new_ids"]
+        dropped_ids += plans[key]["dropped_stories"]
 
     # An override whose master item vanished is a page pointing into empty space.
     # Refuse rather than produce it: the fix is a human decision about whether the
