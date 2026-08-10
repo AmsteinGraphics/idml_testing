@@ -23,13 +23,17 @@ on:
   push:
     paths:
       - 'manuals/*/submissions/**.idml'
+      - 'manuals/*/*.manual'          # sync/palette/hierarchy change the output
       - 'toolchain/**'
       - 'kit/**'
+      - '.github/workflows/**'        # or a change to this file never runs itself
   pull_request:
     paths:
       - 'manuals/*/submissions/**.idml'
+      - 'manuals/*/*.manual'
       - 'toolchain/**'
       - 'kit/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       submission:
