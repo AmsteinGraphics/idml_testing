@@ -22,6 +22,7 @@ import os
 import re
 import sys
 
+import normalize_input as N
 import sectionize as S
 
 PAGE_H, M_TOP, M_BOT = 595.275590551, 22.170070866, 55.842519685
@@ -77,12 +78,26 @@ def local(t):
 
 
 def master_by_name(build, name):
-    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
+    """The one master with this Name — ambiguity is an error, not a coin toss.
+
+    Picking the first match silently chose between the clones a pre-fix build
+    left behind (three masters answering to BaseTabs), so configure_chapters
+    could rebuild one strip while this read another. normalize_input.py clears
+    them; anything left here needs a human.
+    """
+    hits = []
+    for f in sorted(glob.glob(os.path.join(build, "MasterSpreads", "*.xml"))):
         t = open(f, encoding="utf-8").read()
         m = re.search(r'<MasterSpread\b[^>]*?\bName="([^"]*)"', t)
         if m and m.group(1) == name:
-            return f, t
-    raise SystemExit(f"master named {name!r} not found")
+            hits.append((f, t))
+    if not hits:
+        raise SystemExit(f"master named {name!r} not found")
+    if len(hits) > 1:
+        raise SystemExit(f"{len(hits)} masters are named {name!r}: "
+                         + ", ".join(os.path.basename(f) for f, _ in hits)
+                         + f"\nRun:  python3 normalize_input.py {build}")
+    return hits[0]
 
 
 def corners(block):
@@ -284,33 +299,15 @@ def main():
     # output otherwise mints a second S1..SN set beside the first, and two masters
     # sharing NamePrefix+BaseName is the duplicate identity that crashes InDesign
     # 2026. Purge any previous set before minting this one, so a re-run converges.
-    purged, purged_stories = [], set()
-    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
-        t = open(f, encoding="utf-8").read()
-        m = re.search(r'<MasterSpread\b[^>]*\bNamePrefix="S\d+"', t)
-        if not m:
-            continue
-        purged.append(re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"', t).group(1))
-        purged_stories |= set(re.findall(r'ParentStory="([^"]+)"', t))
-        os.remove(f)
-    if purged and not args.dry_run:
-        for sid in purged_stories:
-            p = os.path.join(build, "Stories", f"Story_{sid}.xml")
-            if os.path.exists(p):
-                os.remove(p)
-        dmp = os.path.join(build, "designmap.xml")
-        d = open(dmp, encoding="utf-8").read()
-        for dead in purged:
-            d = re.sub(r'[ \t]*<idPkg:MasterSpread\b[^>]*MasterSpread_%s\.xml"[^>]*/>\s*\n?'
-                       % re.escape(dead), "", d)
-        for sid in purged_stories:
-            d = re.sub(r'[ \t]*<idPkg:Story\b[^>]*Story_%s\.xml"[^>]*/>\s*\n?'
-                       % re.escape(sid), "", d)
-        keep = [s for s in re.search(r'StoryList="([^"]*)"', d).group(1).split()
-                if s not in purged_stories]
-        d = re.sub(r'StoryList="[^"]*"', 'StoryList="' + " ".join(keep) + '"', d, count=1)
-        open(dmp, "w", encoding="utf-8").write(d)
-        print(f"  purged {len(purged)} chapter master(s) from a previous run")
+    # Pages are repointed to B-Base as they are purged: this run re-applies a master
+    # to every chapter page, but front matter ahead of chapter 1 is not covered, and
+    # a page naming a master that no longer exists will not open.
+    previous = [m for m in N.masters(build) if re.fullmatch(r"S\d+", m["prefix"] or "")]
+    if previous:
+        r = N.purge_masters(build, [m["self"] for m in previous],
+                            repoint_to=N.base_master_self(build), dry_run=args.dry_run)
+        print(f"  purged {r['masters']} chapter master(s) from a previous run "
+              f"({r['stories']} stories, {r['repointed']} page(s) repointed to B-Base)")
     secs = S.compute_sections(chapters, ordered_pages)
     base_self = re.search(r'<MasterSpread\b[^>]*Self="([^"]+)"',
                           master_by_name(build, "B-Base")[1]).group(1)

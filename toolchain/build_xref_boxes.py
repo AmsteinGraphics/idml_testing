@@ -193,6 +193,9 @@ def main():
     ap.add_argument("--static", action="store_true",
                     help="put the section number in the box as plain text instead of a live "
                          "cross-reference (reliable for print; no auto-update)")
+    ap.add_argument("--allow-existing", action="store_true",
+                    help="proceed even though the document already holds margin boxes "
+                         "(they are not deduplicated — you will get two per word)")
     ap.add_argument("--jsx", action="store_true",
                     help="do NOT author boxes in IDML (InDesign won't bind hand-authored "
                          "anchored frames); only suppress dead links + log. Create the boxes "
@@ -200,6 +203,18 @@ def main():
     args = ap.parse_args()
     build = args.build.rstrip("/\\")
     log_path = args.log or (build + ".xref_log.csv")
+
+    # Boxes are additive: neither this nor the JSX looks for one that already
+    # exists, so running over a document that has them puts a second box beside
+    # every word. Refuse instead — normalize_input.py is what takes them off.
+    import normalize_input as N
+    existing_boxes = N.detect(build)["boxes"]
+    if existing_boxes and not args.allow_existing:
+        raise SystemExit(
+            f"{existing_boxes} oblique-ref margin box(es) are already in this "
+            f"document.\nBuilding again would place a second box beside each word. "
+            f"Strip them first:\n  python3 normalize_input.py {build}\n"
+            f"(--allow-existing overrides, if you know they are not duplicates)")
 
     tmpl = load_templates(build, args.format)
     ix = R.load(build)

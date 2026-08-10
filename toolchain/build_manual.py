@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the pre-InDesign leg of the forward pipeline for one submission.
+"""Run the pre-InDesign leg of the forward pipeline for one manual.
 
     build_manual.py manuals/<product>/submissions/<file>.idml [--out DIR] [--keep]
 
@@ -17,9 +17,17 @@ What this produces is the file to open and run that script on:
                                                                         |
                         open in InDesign, run place_xref_boxes.jsx, export IDML
                                                                         |
-                                    -> fix_underlines.py -> validate -> repack
+                                                                    (feed back)
 
-Exit code 0 means the submission survived every stage and validates clean.
+THE INPUT MAY BE A FINISHED MANUAL. Refining the book is iterative: edit the
+content in InDesign, export IDML, and hand that straight back to this script. A
+processed file is detected (margin boxes, per-chapter masters, more than one
+section) and normalize_input.py runs first, taking it back to submission state —
+boxes off, InDesign's local underline overrides off, orphaned hyperlinks off —
+after which every forward stage behaves exactly as it does on a fresh
+submission. `--as-submission` skips the check, `--reprocess` forces it.
+
+Exit code 0 means the input survived every stage and validates clean.
 """
 import argparse
 import os
@@ -29,6 +37,8 @@ import sys
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import normalize_input as N
 
 
 def run(script, *args, capture=False):
@@ -47,18 +57,25 @@ def run(script, *args, capture=False):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("submission")
+    ap.add_argument("submission", metavar="INPUT.idml",
+                    help="a submission, or a manual this pipeline already produced")
     ap.add_argument("--out", help="output directory (default: the manual's out/)")
     ap.add_argument("--keep", action="store_true", help="keep the unpacked build tree")
+    ap.add_argument("--reprocess", action="store_true",
+                    help="normalise the input first even if it looks like a submission")
+    ap.add_argument("--as-submission", action="store_true",
+                    help="never normalise — treat the input as a fresh submission")
     args = ap.parse_args()
 
     sub = os.path.abspath(args.submission)
     if not os.path.exists(sub):
-        raise SystemExit(f"no such submission: {args.submission}")
-    # manuals/<product>/submissions/<file>.idml -> manuals/<product>
+        raise SystemExit(f"no such file: {args.submission}")
+    # manuals/<product>/<any>/<file>.idml -> manuals/<product>. The intermediate
+    # directory used to have to be `submissions`, which made feeding a finished
+    # manual back in impossible without shuffling files; `roundtrips/` and `out/`
+    # are equally valid sources now. Config discovery walks outward from the build
+    # directory either way, so it lands on the same <product>.manual.
     manual_dir = os.path.dirname(os.path.dirname(sub))
-    if os.path.basename(os.path.dirname(sub)) != "submissions":
-        raise SystemExit("expected a path like manuals/<product>/submissions/<file>.idml")
     product = os.path.basename(manual_dir)
     build = os.path.join(manual_dir, "build")
     outdir = args.out or os.path.join(manual_dir, "out")
@@ -66,7 +83,7 @@ def main():
     ready = os.path.join(outdir, f"{name}.ready.idml")
 
     print(f"manual   : {product}")
-    print(f"submission: {os.path.relpath(sub)}")
+    print(f"input    : {os.path.relpath(sub)}")
 
     if os.path.isdir(build):
         import shutil
@@ -75,6 +92,15 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     with zipfile.ZipFile(sub) as z:
         z.extractall(build)
+
+    # A finished manual fed back in is taken to submission state first, so every
+    # stage below sees the same shape it sees on a fresh pour. Without this the
+    # boxes would double up and InDesign's underline overrides would survive.
+    if args.as_submission:
+        print("\n(--as-submission: input treated as a fresh submission, not normalised)")
+    elif args.reprocess or N.is_processed(build):
+        print("\n=== input has already been through the pipeline: normalising ===")
+        N.normalize(build)
 
     # idempotent on an already-standard document; migrates a pre-standardisation one
     run("standardize_kit.py", build)
@@ -100,8 +126,9 @@ def main():
         shutil.rmtree(build)
 
     print(f"\nready for InDesign: {os.path.relpath(ready)}")
-    print("next: open it, run toolchain/place_xref_boxes.jsx, export IDML, then "
-          "fix_underlines.py + validate_idml.py + repack.py")
+    print("next: open it, run toolchain/place_xref_boxes.jsx, then either")
+    print("  finish_manual.py <export>.idml   to clean up and ship that state, or")
+    print("  build_manual.py  <export>.idml   to edit further and run the whole leg again")
     return 0
 
 

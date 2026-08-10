@@ -189,15 +189,28 @@ def main():
     ty0 = Y0 + (TY0_NUM26 - Y0) * scale     # number origin, scaled about the box top
 
     # --- locate BaseTabs -----------------------------------------------------
-    bt_path = None
-    for f in glob.glob(os.path.join(build, "MasterSpreads", "*.xml")):
+    # Matched on the master's identity (NamePrefix BT), not on "BaseTabs" appearing
+    # somewhere in its Name: a pre-fix build's chapter masters come back from
+    # InDesign renamed to A-BaseTabs / D-BaseTabs, and a substring match picked
+    # whichever sorted first — rebuilding one strip while apply_tabs.py read
+    # another. normalize_input.py purges those; ambiguity here is an error.
+    bt_hits = []
+    for f in sorted(glob.glob(os.path.join(build, "MasterSpreads", "*.xml"))):
         t = open(f, encoding="utf-8").read()
-        m = re.search(r'<MasterSpread\b[^>]*\bName="([^"]*)"', t)
-        if m and "BaseTabs" in m.group(1):
-            bt_path, bt = f, t
-            break
-    if not bt_path:
+        m = re.search(r'<MasterSpread\b[^>]*>', t)
+        if not m:
+            continue
+        name = (re.search(r'\bName="([^"]*)"', m.group(0)) or [None, ""])[1]
+        prefix = (re.search(r'\bNamePrefix="([^"]*)"', m.group(0)) or [None, ""])[1]
+        if name == "BT-BaseTabs" or prefix == "BT":
+            bt_hits.append((f, t))
+    if not bt_hits:
         raise SystemExit("BT-BaseTabs master not found")
+    if len(bt_hits) > 1:
+        raise SystemExit("more than one BT-BaseTabs master: "
+                         + ", ".join(os.path.basename(f) for f, _ in bt_hits)
+                         + f"\nRun:  python3 normalize_input.py {build}")
+    bt_path, bt = bt_hits[0]
 
     # Chapter masters, if this tree has any. Keyed on the naming convention
     # (NamePrefix S1..SN, as both v1.76 and apply_tabs.py use), NOT on fill colour
