@@ -5,6 +5,9 @@ Python tooling for inspecting, repairing and generating [IDML](https://www.adobe
 
 > **Just want to make a manual?** Read [GUIDE.md](GUIDE.md) — three steps, six commands,
 > no XML. This file is the reference for how and why it works.
+>
+> **Picking the work up cold?** Read [docs/handoff/](docs/handoff/README.md) — where things
+> stopped, what comes next, and the decisions behind the code.
 
 Three jobs:
 
@@ -43,6 +46,8 @@ manuals/
     submissions/                       content poured into the kit, from InDesign
     audit/                             cross-reference audit output
     build/                             working tree (not tracked)
+docs/handoff/       context for picking the work up cold — decisions, dead ends,
+                    the next task and its open questions
 ```
 
 **The kit and the toolchain are the standard; a manual is an instance of it.** That is

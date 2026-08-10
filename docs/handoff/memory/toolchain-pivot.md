@@ -1,0 +1,34 @@
+---
+name: toolchain-pivot
+description: The DM32 IDML toolchain is pivoting from audit/reverse-engineer to forward content production on top of manual_template_nosection.idml
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: b84fab6b-278f-44c5-9fb3-3dc4c4901651
+---
+
+`manual_template_nosection.idml` (added 2026-08-04) is the canonical hand-authored EMPTY kit — the real starting point before content is poured. It supersedes the old `make_template.py → prune → bake_masters` reverse-engineering path (that DERIVED a kit from the shipped manual; nosection IS the kit, authored natively).
+
+Contents of the kit: 7 named masters (B-Base, BT-BaseTabs, NT-NavTabs, Sx-Section, C-Contents, I-Index, N-Notes), 45 para / 42 char / 23 object styles, palette Black + PANTONE 292 U / 130 U / Warm Gray 1 U, **24 pre-baked mixed-ink `tab_01..tab_24` swatches** in Graphic.xml (tab gradient already solved, no .ai dependency), full layer stack, xref engine present (formats `dm32_cross_ref`/`dm32_cross_par`) but zero destinations/links.
+
+Goal: the toolchain now does the heavy lifting on poured content — per-section template creation & application, tab creation for N chapters, oblique-ref margin boxes (underlined word ↔ ref target). See [[section-master-conventions]].
+
+PROGRESS (2026-08-04):
+- Phase 1 DONE — `sectionize.py`: detects chapters via titles:lvl2, maps each to start page (head-frame geometry), rewrites one <Section> per chapter in designmap. Verified on test1 → 3 sections.
+- Phase 2 DONE — `apply_tabs.py`: per chapter clones BT-BaseTabs, keeps only slot K-1's L/R tab+number, fresh ids, digit=K, names master `S<k>-<Title>`, registers + applies to page range. Verified: S1/S2/S3, fills pure-292/tab_01/tab_02, digits 1/2/3, pages 14/10/12. Both scripts reuse S.detect_chapters/compute_sections from sectionize.
+- Tab behaviour: user chose to KEEP the uniform N=26 grid (tabs sit near top in first 3 gradient colours), NOT respace-to-fill. Respace-to-fill (make_18ch-style, parametric on N) remains an optional future mode.
+- Proof files in repo: manual_template_test1_sectioned.idml (Phase 1), manual_template_test1_tabs.idml (Phase 1+2). Both open cleanly in InDesign per user.
+- Phase 3 DONE — `strip_xref_boxes.py` (removes margin boxes → boxless submission) + `build_xref_boxes.py` (materialises margin boxes from underlined words that already carry Hyperlink→named-dest; skips dead/out-of-excerpt links). Uses fidelity templates in `xref_templates/` (box_frame.xml, margin_story.xml) extracted from a real box; format dm32_cross_ref (u1520). Reuses resolve_xref.Index. Round-trip vs test1 oracle: 26 boxes generated, 13/16 distinct (key,number) exact match; key 160 correctly skipped (orphan margin number with no word); key 198 cosmetic cached-number diff (InDesign refreshes on open). Submission contract confirmed by user: underlined word already has HyperlinkTextSource + Hyperlink→named dest.
+- Dead links: test1's ~30 dead (key 0) links are a FIXTURE artifact — content copy-pasted from v1.76, targets live outside the 3-ch excerpt. Not a toolchain concern; generator skips+reports them.
+- FULL PIPELINE verified end-to-end (strip→sectionize→apply_tabs→build_xref_boxes→validate→repack) → manual_template_test1_full.idml.
+- Phase 3 v2 (2026-08-05): rebuilt build_xref_boxes.py against `manual_template_test2.idml` — the proper AUTHORING-STATE fixture (active dm32_list numbering reimported by user, all margin boxes deleted). Now: (a) computes LIVE section numbers by walking lvl2/3/4 headings in chapter/page order (compute_section_numbers) and caches them in the box Content (excerpt numbers 1-based: ch1/ch2/ch3 → 1.x/2.x/3.x); (b) SUPPRESSES + LOGS dead links per user request — dead = no-hyperlink / target-not-in-document / non-named-anchor; suppression removes the CharacterStyle/link underline, unwraps the HyperlinkTextSource (keeps word text), drops its designmap <Hyperlink>; (c) writes CSV audit log at `<build>.xref_log.csv` (action,word,dest_key,number,target,story,reason). Flags: --keep-dead, --log PATH, --dry-run. test2 result: 26 boxes + 30 suppressed (all cross-excerpt copy-paste links), validates, parses. Deliverables in repo: manual_template_test2_xref.idml + test2_xref_log.csv. AWAITING user InDesign check: do boxes populate with live numbers, are dead links cleanly de-underlined. Minor known nit: link-CSR de-underline may miss a couple dead words whose wrapping range isn't a direct CharacterStyle/link (xref still removed; underline may persist) — refine if it shows.
+- Phase 3 RESOLVED via JSX (2026-08-05): IDML-authored anchored boxes never bind on import (see [[oblique-link-structure]]). Solution shipped: `place_xref_boxes.jsx` creates boxes NATIVELY in InDesign (rebuild-on-rerun; live dm32_cross_ref xref per underlined word). `build_xref_boxes.py --jsx` suppresses dead links in IDML + logs, defers boxes to the JSX. User CONFIRMED JSX boxes render with correct styles.
+- `fix_numbering.py` ADDED (2026-08-05): patches Styles.xml so titles:lvl2/lvl3 join dm32_list as NumberedList (levels 1/2) matching lvl4 — submissions arrive with only lvl4 wired, so lvl2/lvl3 never counted (stuck at 1, lvl4's ^1.^2.^3 collapsed to 1.1.x). Idempotent. Run FIRST.
+- FULL FORWARD PIPELINE (2026-08-05): fix_numbering → sectionize → apply_tabs → build_xref_boxes --jsx → repack → (open in InDesign) → run place_xref_boxes.jsx. Proof: manual_template_test2_jsx.idml.
+- JSX API notes: ip.textFrames.add() creates the anchored frame fine; box size not set by object style → JSX sets geometricBounds to 10.00×3.64mm; cross-reference creation had API uncertainty (instrumented with A/B forms) — user's processed export (manual_template_test2_jsx_processed.idml) shows InDesign natively wrote ParentInterfaceChangeCount="" (so blanking was never the IDML binding culprit).
+- OPEN: verify apply_tabs tab-number DIGITS render (same anchored-placement risk — may need JSX too); the 4 skipped index-entry (PageReference) sources; Phase 4 Contents/Index; commit milestone (many untracked scripts/proofs on main).
+- Pre-existing benign quirk: validate_idml.py reports `StoryList names missing stories: ['u98']` on ALL test1 builds — present in the original export, not introduced by the toolchain.
+
+Chapter marker = paragraph style **`titles:lvl2`** (confirmed by user). No `titles:lvl1` exists. Each occurrence starts a new chapter/section. Chapter NUMBER is a literal prefix token in the heading text (e.g. "5 Entering and displaying numbers" → chapter 5).
+
+Test corpus: `manual_template_test1.idml` — content poured into nosection, one story PER chapter, sections not yet created. It is literally chapters 5–7 of the real manual ("Entering and displaying numbers", "Variables", "Overview of math functions"), so the shipped manual is a perfect oracle to diff generated output against. Detected starts: ch5→page1, ch6→page15, ch7→page25; 36 pages total, all on Sx-Section master, one section.
