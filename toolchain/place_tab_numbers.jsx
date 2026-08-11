@@ -172,12 +172,36 @@
             if (pg === null) continue;                  // overset or unplaced
             var num = numberOf(paras[p]);
             if (num === null) { noNumber++; continue; }
-            heads.push({ offset: pg.documentOffset, order: p, level: lvl, number: num });
+            heads.push({ offset: pg.documentOffset, order: p, level: lvl, own: num });
         }
     }
     heads.sort(function (a, b) {
         return (a.offset - b.offset) || (a.order - b.order);
     });
+
+    // ---- 2b. compose the multi-level number -------------------------------
+    // numberingResultNumber returns the paragraph's OWN level counter, not the
+    // composed number: heading 2.3.2 hands back 2. The first run placed bare
+    // digits because of it. Rather than reimplement the numbering rules, carry
+    // the most recent counter for each level and join them -- every component is
+    // still InDesign's own number, so restarts and skips stay correct.
+    //
+    // The manual's levels are lvl2 -> 1, lvl3 -> 2, lvl4 -> 3 (lvl1 is a Part
+    // label and does not count), so a lvl3 heading composes to "x.x" and that is
+    // exactly the short form the tab is meant to show on a page that has not
+    // reached a lvl4 yet.
+    var last = {};                      // level -> that level's current counter
+    for (var q = 0; q < heads.length; q++) {
+        var h = heads[q];
+        last[h.level] = h.own;
+        for (var deeper = h.level + 1; deeper <= 9; deeper++) delete last[deeper];
+        var parts = [];
+        for (var L = MIN_LEVEL; L <= h.level; L++) {
+            if (last[L] === undefined) continue;      // a level was skipped
+            parts.push(last[L]);
+        }
+        h.number = parts.join(".");
+    }
 
     if (heads.length === 0) {
         // Say WHICH half failed. "Found nothing" on its own sent the last run
@@ -252,8 +276,18 @@
     // ---- 4. report ---------------------------------------------------------
     var msg = "Tab numbers placed: " + placed
             + "\nheadings found: " + heads.length
-            + "\nnumber read via: " + (numberForm || "-")
+            + "\nnumber read via: " + (numberForm || "-") + " (composed per level)"
             + "\nprevious overrides cleared: " + cleared;
+    if (heads.length) {
+        // a composed sample, so the numbers can be sanity-checked from the dialog
+        // rather than by hunting through the document
+        msg += "\n\nfirst headings, as composed:\n";
+        for (var sN = 0; sN < Math.min(heads.length, 6); sN++) {
+            msg += "  lvl" + heads[sN].level + "  " + heads[sN].number + "\n";
+        }
+        var lastH = heads[heads.length - 1];
+        msg += "  ...\n  lvl" + lastH.level + "  " + lastH.number + "  (last)\n";
+    }
     if (noFrame) {
         msg += "\npages with no tab frame on their master: " + noFrame;
         if (placed === 0) {
