@@ -39,6 +39,7 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import manualconf
 import normalize_input as N
 
 
@@ -142,7 +143,12 @@ def main():
         shutil.rmtree(build)
 
     print(f"\nready for InDesign: {os.path.relpath(ready)}")
-    print("next: open it, run toolchain/place_xref_boxes.jsx, then either")
+    # config discovery is path-based, so this still resolves after the tree is gone
+    if manualconf.load(build)["tab_shows"] == "paragraph_number":
+        print("next: open it, run toolchain/place_xref_boxes.jsx AND "
+              "toolchain/place_tab_numbers.jsx, then either")
+    else:
+        print("next: open it, run toolchain/place_xref_boxes.jsx, then either")
     print("  finish_manual.py <export>.idml   to clean up and ship that state, or")
     print("  build_manual.py  <export>.idml   to edit further and run the whole leg again")
     return 0

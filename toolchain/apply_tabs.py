@@ -22,6 +22,7 @@ import os
 import re
 import sys
 
+import manualconf
 import normalize_input as N
 import sectionize as S
 
@@ -207,7 +208,21 @@ def set_digit(story_xml, digit):
                   story_xml, count=1)
 
 
-def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint):
+def clear_number(story_xml):
+    """Empty the tab-number range, leaving the frame for the JSX to fill.
+
+    `paragraph_number` puts a DIFFERENT number on every page, so nothing can be
+    baked into a chapter master -- one master serves the whole chapter. The frame
+    keeps its geometry and its foot_and_tabs:tab_right paragraph style, which is
+    how place_tab_numbers.jsx finds it.
+    """
+    story_xml = re.sub(r'(<CharacterStyleRange[^>]*>\s*<Content>)[^<]*(</Content>)',
+                       r'\g<1>\g<2>', story_xml, count=1)
+    return story_xml
+
+
+def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint,
+                         tab_shows="chapter_digit"):
     """Return (master_filename, master_xml, [(story_filename, story_xml)], master_self)."""
     t = basetabs_xml
     # --- prune tab rectangles to this slot ---
@@ -278,7 +293,7 @@ def build_chapter_master(build, basetabs_xml, k, slot, title, base_self, mint):
         sx = open(sp, encoding="utf-8").read()
         sx = re.sub(rf'"{re.escape(old_sid)}"', f'"{new_sid}"', sx)
         if is_number[old_sid]:
-            sx = set_digit(sx, str(k))
+            sx = clear_number(sx) if tab_shows == "paragraph_number" else set_digit(sx, str(k))
         story_files.append((f"Story_{new_sid}.xml", sx, new_sid))
 
     return f"MasterSpread_{master_self}.xml", t, story_files, master_self
@@ -290,6 +305,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     build = args.build
+
+    tab_shows = manualconf.load(build)["tab_shows"]
+    if tab_shows == "paragraph_number":
+        print("  tab_shows=paragraph_number: number frames left empty for "
+              "place_tab_numbers.jsx (the number differs per page)")
 
     chapters, ordered_pages = S.detect_chapters(build)   # topmost level present
     if not chapters:
@@ -350,7 +370,7 @@ def main():
         start = c["page_order"]
         page_selfs = [p["self"] for p in ordered_pages[start:start + s["length"]]]
         fname, mxml, stories, master_self = build_chapter_master(
-            build, basetabs_xml, k, slot, c["title"], base_self, mint)
+            build, basetabs_xml, k, slot, c["title"], base_self, mint, tab_shows)
         plan.append(dict(k=k, slot=slot, title=c["title"], fname=fname, mxml=mxml,
                          stories=stories, page_selfs=page_selfs, master_self=master_self))
         # report the fill this master actually got. It used to be looked up in
@@ -359,7 +379,8 @@ def main():
         got = re.search(TABFILL, mxml)
         fill = re.search(r'"([^"]+)"', got.group(0)).group(1).split("/", 1)[-1] if got else "?"
         print(f"  S{k}-{c['title'][:40]:40} slot{slot} fill={fill:22} "
-              f"digit={k} pages={page_selfs[0]}..+{len(page_selfs)-1}")
+              f"number={'(jsx)' if tab_shows == 'paragraph_number' else k} "
+              f"pages={page_selfs[0]}..+{len(page_selfs)-1}")
 
     if args.dry_run:
         print("\n(dry-run: nothing written)")

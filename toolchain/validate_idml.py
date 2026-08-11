@@ -303,10 +303,13 @@ if _conf["levels"]:
         t = reads(f)
         for m in re.finditer(r'AppliedParagraphStyle="ParagraphStyle/titles%3alvl(\d)"', t):
             used[int(m.group(1))] = used.get(int(m.group(1)), 0) + 1
+    # The leading-zero test only concerns levels that COUNT, so it looks at the
+    # numbered ones. The tab test must not: a tab can sit on a label level above
+    # number_from -- tabs on the 23 chapters, numbering starting a level deeper --
+    # and reading the filtered set there reported 23 present headings as absent.
+    present = dict(used)
+    first = _conf["number_from"] or 1
     if used:
-        # numbering starts at number_from; levels above it are unnumbered labels and
-        # take no part in the counting, so they are not what a leading zero is about
-        first = _conf["number_from"] or 1
         used = {k: v for k, v in used.items() if k >= first}
     if used:
         top, deepest = min(used), max(used)
@@ -321,10 +324,10 @@ if _conf["levels"]:
               f"{declared} level(s); raise `levels` or restyle those headings")
     tab = _conf["tab_level"]
     if tab:
-        check(tab in used or not used,
+        check(tab in present or not present,
               f"tab_level is {tab} but no titles:lvl{tab} heading appears in the "
               f"content, so there would be no tabs (levels present: "
-              f"{sorted(used) or 'none'})")
+              f"{sorted(present) or 'none'})")
 
 # ---- 10d. master identity must be unique -----------------------------------
 # A master is identified by NamePrefix + BaseName, not by Name. Two masters

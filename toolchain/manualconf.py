@@ -51,6 +51,19 @@ KIT_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # What `sync = ...` accepts. See sync_from_kit.py.
 SYNCABLE = {"masters", "styles", "swatches"}
 
+# What `tab_shows = ...` accepts.
+#
+#   chapter_digit     the chapter's ordinal, baked into the master by apply_tabs.
+#                     One number per chapter, identical on every page of it.
+#   paragraph_number  the running section number of the last numbered heading that
+#                     begins on or before the page -- "2.3.2", dropping to "2.3"
+#                     on a page that has not reached a lvl4 yet. It varies per
+#                     page, so it CANNOT live on the chapter master and cannot be
+#                     computed here: what is visible on a page is known only once
+#                     InDesign has composed the text. apply_tabs leaves the frame
+#                     empty and place_tab_numbers.jsx fills it.
+TAB_SHOWS = {"chapter_digit", "paragraph_number"}
+
 
 def candidates(build, suffix=".manual"):
     b = build.rstrip("/")
@@ -87,7 +100,7 @@ def parse_stop(value, where):
 def load(build, explicit=None):
     """{swatches, levels, tab_level, tab_stops, chapter_style, heading_styles, path}."""
     conf = dict(swatches=[], levels=None, tab_level=None, number_from=None,
-                tab_stops=[], sync=[], path=None)
+                tab_stops=[], sync=[], tab_shows="chapter_digit", path=None)
 
     path = explicit
     if path and not os.path.exists(path):
@@ -112,6 +125,11 @@ def load(build, explicit=None):
                 if not v.isdigit():
                     raise SystemExit(f"{path}:{n}: {k} must be a number, got {v!r}")
                 conf[k] = int(v)
+            elif k == "tab_shows":
+                if v not in TAB_SHOWS:
+                    raise SystemExit(f"{path}:{n}: tab_shows {v!r} is not one of "
+                                     f"{', '.join(sorted(TAB_SHOWS))}")
+                conf["tab_shows"] = v
             elif k == "sync":
                 # Which parts of the kit are authoritative for this manual, i.e.
                 # re-transplanted on every build so a kit change reaches it. Opt-in:
@@ -128,7 +146,7 @@ def load(build, explicit=None):
             else:
                 raise SystemExit(f"{path}:{n}: unknown key {k!r} "
                                  f"(expected swatch, tab_stop, levels, tab_level, "
-                                 f"number_from, sync)")
+                                 f"number_from, tab_shows, sync)")
     else:
         # a pre-consolidation manual may still carry the palette on its own
         legacy = next((p for p in candidates(build, ".swatches") if os.path.exists(p)), None)

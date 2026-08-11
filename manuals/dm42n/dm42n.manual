@@ -39,4 +39,10 @@ number_from = 2
 # Undeclared, sync_from_kit.py only reports what has drifted. Opt in per manual --
 # overwriting a book's masters is not something to do by surprise, so this default
 # is deliberately NOT inherited as "on".
-sync = masters
+# sync = masters
+
+# The tab shows the running section number of the last numbered heading that
+# begins on or before the page ("2.3.2", dropping to "2.3" where no lvl4 has been
+# reached yet). It varies per page, so apply_tabs leaves the frame empty and
+# place_tab_numbers.jsx fills it inside InDesign.
+tab_shows = paragraph_number

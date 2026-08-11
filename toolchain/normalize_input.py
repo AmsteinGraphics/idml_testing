@@ -174,6 +174,79 @@ def purge_masters(build, selfs, repoint_to=None, dry_run=False):
     return dict(masters=len(selfs), stories=len(story_ids), repointed=repointed)
 
 
+TAB_NUMBER_PARA = "ParagraphStyle/foot_and_tabs%3atab_right"
+
+
+def tab_number_overrides(build):
+    """[(spread path, frame story id)] for every page-level tab number.
+
+    With `tab_shows = paragraph_number`, place_tab_numbers.jsx overrides the
+    chapter master's tab frame on each page and writes that page's running
+    number into it -- it has to, because one master serves a whole chapter while
+    the number changes page by page.
+
+    Those overrides are page content, not master content, so apply_tabs.py's
+    purge of the previous S<k> master set does not touch them: they would survive
+    into the rebuilt document carrying numbers computed for the OLD pagination,
+    which is worse than carrying none. Detected by the frame's paragraph style,
+    the same handle the JSX uses.
+    """
+    out = []
+    for sp in sorted(glob.glob(os.path.join(build, "Spreads", "*.xml"))):
+        sx = _read(sp)
+        if "OverriddenPageItemProps" not in sx:
+            continue
+        for m in re.finditer(r'<TextFrame\b[^>]*>', sx):
+            tag = m.group(0)
+            if "OverriddenPageItemProps" not in tag:
+                continue
+            sid = re.search(r'ParentStory="([^"]+)"', tag)
+            if not sid:
+                continue
+            story = os.path.join(build, "Stories", f"Story_{sid.group(1)}.xml")
+            if os.path.exists(story) and TAB_NUMBER_PARA in _read(story):
+                out.append((sp, sid.group(1)))
+    return out
+
+
+def drop_tab_number_overrides(build, dry_run=False):
+    """Remove them: the frames, their stories, and their designmap registration."""
+    hits = tab_number_overrides(build)
+    if not hits or dry_run:
+        return len(hits)
+    by_spread = {}
+    for sp, sid in hits:
+        by_spread.setdefault(sp, []).append(sid)
+
+    for sp, sids in by_spread.items():
+        sx = _read(sp)
+        for sid in sids:
+            # the frame, whether it closes normally or is self-closed
+            sx = re.sub(r'[ \t]*<TextFrame\b[^>]*ParentStory="%s"[^>]*>.*?</TextFrame>\s*\n?'
+                        % re.escape(sid), "", sx, flags=re.S)
+            sx = re.sub(r'[ \t]*<TextFrame\b[^>]*ParentStory="%s"[^>]*/>\s*\n?'
+                        % re.escape(sid), "", sx)
+        open(sp, "w", encoding="utf-8").write(sx)
+
+    story_ids = {sid for _, sid in hits}
+    for sid in story_ids:
+        p = os.path.join(build, "Stories", f"Story_{sid}.xml")
+        if os.path.exists(p):
+            os.remove(p)
+
+    dmp = os.path.join(build, "designmap.xml")
+    d = _read(dmp)
+    for sid in story_ids:
+        d = re.sub(r'[ \t]*<idPkg:Story\b[^>]*Story_%s\.xml"[^>]*/>\s*\n?'
+                   % re.escape(sid), "", d)
+    sl = re.search(r'StoryList="([^"]*)"', d)
+    if sl:
+        keep = [x for x in sl.group(1).split() if x not in story_ids]
+        d = re.sub(r'StoryList="[^"]*"', 'StoryList="' + " ".join(keep) + '"', d, count=1)
+    open(dmp, "w", encoding="utf-8").write(d)
+    return len(hits)
+
+
 def drop_orphan_hyperlinks(build, dry_run=False):
     """Remove <Hyperlink> entries whose Source is in no story.
 
@@ -213,6 +286,7 @@ def detect(build):
         sections=len(re.findall(r"<Section\b", d)),
         underlines=sum(1 for p in glob.glob(os.path.join(build, "Stories", "*.xml"))
                        if re.search(r'<CharacterStyleRange\b[^>]*\bUnderline', _read(p))),
+        tab_numbers=len(tab_number_overrides(build)),
     )
 
 
@@ -224,7 +298,7 @@ def is_processed(build):
     """
     m = detect(build)
     return bool(m["boxes"] or m["chapter_masters"] or m["legacy_masters"]
-                or m["sections"] > 1)
+                or m["sections"] > 1 or m["tab_numbers"])
 
 
 def describe(marks):
@@ -239,6 +313,8 @@ def describe(marks):
         bits.append(f'{marks["sections"]} sections')
     if marks["underlines"]:
         bits.append(f'local underlines in {marks["underlines"]} story file(s)')
+    if marks.get("tab_numbers"):
+        bits.append(f'{marks["tab_numbers"]} page tab number(s)')
     return ", ".join(bits) or "nothing"
 
 
@@ -254,7 +330,7 @@ def run(script, *args):
 def normalize(build, dry_run=False):
     marks = detect(build)
     print(f"input carries: {describe(marks)}")
-    if not is_processed(build) and not marks["underlines"]:
+    if not is_processed(build) and not marks["underlines"] and not marks["tab_numbers"]:
         print("already in submission state — nothing to undo")
         return marks
 
@@ -281,6 +357,14 @@ def normalize(build, dry_run=False):
     n = drop_orphan_hyperlinks(build, dry_run=dry_run)
     if n:
         print(f"  {'would drop' if dry_run else 'dropped'} {n} orphaned hyperlink(s)")
+
+    # 5. per-page tab numbers the JSX placed. They were computed against the OLD
+    #    pagination, and the forward leg cannot correct them -- only InDesign can,
+    #    by running place_tab_numbers.jsx again on the rebuilt document.
+    n = drop_tab_number_overrides(build, dry_run=dry_run)
+    if n:
+        print(f"  {'would drop' if dry_run else 'dropped'} {n} page tab number(s) "
+              f"— re-run place_tab_numbers.jsx after opening the rebuilt file")
 
     if not dry_run:
         left = detect(build)
