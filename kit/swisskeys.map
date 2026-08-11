@@ -13,6 +13,17 @@
 #
 # Names are case-sensitive and must not contain spaces or the closing bracket.
 
+# --- the shift keys themselves ----------------------------------------------
+# `<>` and `<2:>` need no entry here. They render as an EMPTY BUTTON in the shift
+# colour — the two guillemets with four spaces between them — because the space
+# glyph in the button font IS the key body, so four of them draw a blank key.
+# That is exactly how v1.76 does it (U+2039, four U+0020, U+203A).
+#
+# Override only to change the WIDTH, by using a different number of spaces:
+#
+#   SHIFT   = ‹      ›       # a wider shift-1 key
+#   SHIFT2  = ‹   ›          # a narrower shift-2 key
+
 # --- arithmetic and comparison ---------------------------------------------
 SIGMA      = Σ
 TIMES      = ×

@@ -43,6 +43,11 @@ STORY = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 \t\t</ParagraphStyleRange>
 \t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
 \t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+\t\t\t\t<Content>Press the shift key &lt;&gt; then &lt;2:&gt; for the second.</Content>
+\t\t\t</CharacterStyleRange>
+\t\t</ParagraphStyleRange>
+\t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
+\t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
 \t\t\t\t<Content>Escaped \\[EXIT\\] stays literal.</Content>
 \t\t\t</CharacterStyleRange>
 \t\t</ParagraphStyleRange>
@@ -123,6 +128,11 @@ def main():
         want(styled("btn_normal", "‹Σ›"), "[SIGMA] -> glyph map applied")
         want(styled("btn_or", "ACOS"), "<ACOS> -> shift 1, bare")
         want(styled("btn_bl", "MEAN"), "<2:MEAN> -> shift 2, bare")
+        # the shift KEY itself: an empty button in the shift colour. The space
+        # glyph is the key body in this font, so four of them are the blank key --
+        # exactly what v1.76 does (U+2039, four U+0020, U+203A).
+        want(styled("shift_orange", "‹    ›"), "<> -> shift_orange blank key")
+        want(styled("shift_blue", "‹    ›"), "<2:> -> shift_blue blank key")
         want(styled("code_styles%3alcd_sk", "ALL"), "{ALL} -> lcd_sk, bare")
         want(styled("code_styles%3alcd_sk_high", "HI"), "{^HI} -> lcd_sk_high")
         want(styled("code_styles%3alcd_sk_slant", "it"), "{/it} -> lcd_sk_slant")

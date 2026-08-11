@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-11T00:14:18.672Z
+  modified: 2026-08-11T15:00:27.904Z
 ---
 
 Agreed 2026-08-10; **v1 built 2026-08-11**. Authors pour content in InDesign using plain-text
@@ -64,6 +64,7 @@ Keep a reverse as an OPTIONAL repair flag (`--to-markup`), never a pipeline stag
 | `[[A]]` | `‹A›` | `letter_normal` |
 | `<ACOS>` | `ACOS` bare | shift 1 colour |
 | `<2:NAME>` | `NAME` bare | shift 2 colour (DM32 only; DM42n has one shift) |
+| `<>` `<2:>` | `‹` + 4 spaces + `›` | `shift_orange` / `shift_blue` — the shift KEY itself |
 | `{ALL}` `{1 2/3}` | verbatim, bare | `code_styles:lcd_sk` |
 | `{^…}` `{/…}` `{^/…}` | verbatim | `lcd_sk_high` / `_slant` / `_slant_high` |
 

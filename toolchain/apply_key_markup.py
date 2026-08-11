@@ -12,6 +12,8 @@ applies `btn_normal` or `lcd_sk`.
     [[A]]               <A>                   letter_normal     (guillemets added)
     <ACOS>              ACOS                  btn_or            (shift 1, bare)
     <2:NAME>            NAME                  btn_bl            (shift 2, bare)
+    <>                  <    >                shift_orange      (the shift KEY)
+    <2:>                <    >                shift_blue        (2nd shift key)
     {ALL}  {1 2/3}      verbatim              lcd_sk            (bare)
     {^...} {/...}       verbatim              lcd_sk_high / _slant
     {^/...}             verbatim              lcd_sk_slant_high
@@ -99,8 +101,8 @@ TOKEN = re.compile(r"""
       \\(?P<esc>[\[\]<>{}\\])                       # escaped literal
     | \[\[(?P<letter>[^\[\]\n]{1,%(n)d})\]\]        # letter key
     | \[(?P<btn>[^\[\]\n]{1,%(n)d})\]               # button
-    | <(?P<sn>[2-9]):(?P<stxt>[^<>\s\n]{1,%(n)d})>  # indexed shift
-    | <(?P<shift1>[^<>:\s\n]{1,%(n)d})>             # shift 1
+    | <(?P<sn>[2-9]):(?P<stxt>[^<>\s\n]{0,%(n)d})>  # indexed shift; <2:> is its key
+    | <(?P<shift1>[^<>:\s\n]{0,%(n)d})>             # shift 1; <> is the shift key
     | \{\^/(?P<lcd_sh>[^{}\n]{0,%(n)d})\}           # LCD slanted + highlighted
     | \{\^(?P<lcd_h>[^{}\n]{0,%(n)d})\}             # LCD highlighted
     | \{/(?P<lcd_s>[^{}\n]{0,%(n)d})\}              # LCD slanted
@@ -171,8 +173,30 @@ def available_styles(build):
 # --------------------------------------------------------------------------- #
 # rendering one token
 # --------------------------------------------------------------------------- #
+# `<>` is the shift KEY itself, not a function printed above one. v1.76 builds it
+# as an EMPTY BUTTON in the shift colour: the two guillemets with four spaces
+# between them, the whole run styled shift_orange / shift_blue. The space glyph in
+# the button font IS the key body, so four of them give a blank key of that width
+# -- which is why this is spaces and not some dedicated symbol. Verified against
+# v1.76: U+2039 U+0020 x4 U+203A, 5 orange and 8 blue occurrences, no variants.
+SHIFT_KEY_STYLE = {"shift1": "shift_orange", "shift2": "shift_blue"}
+SHIFT_KEY_CONTENT = "‹" + " " * 4 + "›"
+
+
+def shift_symbol_name(kind):
+    """Map entry that can override the default blank key, e.g. a wider one."""
+    n = kind[len("shift"):]
+    return "SHIFT" if n == "1" else "SHIFT" + n
+
+
 def render(kind, text, glyphs):
-    """(style, content) for a matched token."""
+    """(style, content) for a matched token; content None if it cannot be built."""
+    if kind.startswith("shift") and text == "":
+        style = SHIFT_KEY_STYLE.get(kind)
+        if style is None:
+            return None, None                  # no shift-key style for that index
+        return style, glyphs.get(shift_symbol_name(kind), SHIFT_KEY_CONTENT)
+
     style = TARGET[kind]
     # the glyph table maps KEY NAMES, so it applies to buttons and shifted keys.
     # LCD content is verbatim display text and is never looked up.
@@ -354,6 +378,9 @@ def transform_story(path, glyphs, have, stats, problems, dry_run=False):
                         continue                       # left as literal text below
                     else:
                         style, content = render(kind, body, glyphs)
+                    if style is None or content is None:
+                        problems.append(f"{m.group(0)!r} could not be built")
+                        continue                       # left as literal text below
                     if style not in have:
                         problems.append(
                             f"{m.group(0)!r} needs character style {style!r}, which this "

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-11T00:14:26.058Z
+  modified: 2026-08-11T15:00:46.453Z
 ---
 
 Surveyed from `manuals/dm32/dm32_print_manual_v1.76.idml` (2323 stories), re-measured 2026-08-10.
@@ -46,6 +46,13 @@ LCD name, and does NOT match the calculator's real LCD. The user may swap its fo
 - sibling `code_styles:code_sk` (791) — same font/size, program listings, para style `prgm_listing`
 
 Buttons: `btn` (SwissKeys 9.5) → `btn_normal` (Buttons, 1440) → `letter_normal` (Letters, 220),
+**THE SHIFT KEY ITSELF** is an EMPTY BUTTON in the shift colour: `U+2039` + four `U+0020` +
+`U+203A`, the run styled `shift_orange` (5×) or `shift_blue` (8×) — never `btn_or`/`btn_bl`, which
+carry a shifted FUNCTION's name. **The space glyph in the button font is the key body**, so four
+spaces draw a blank key and the count sets its width. That is what `shift_orange`/`shift_blue` are
+actually for; an earlier note called it "a rare construction on the delimiters", which had the
+mechanism right and the meaning wrong. Markup: `<>` and `<2:>`.
+
 `shift_orange`, `shift_blue`; and `btn` → `btn_or` (533) / `btn_bl` (430) which override **only**
 FillColor. So "shifted button = original font in the shift colour" is already modelled.
 
