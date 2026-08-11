@@ -107,11 +107,34 @@
         return null;
     }
 
+    // The tab frames are EMPTY by design under tab_shows = paragraph_number --
+    // apply_tabs.py clears them precisely so this script can fill them. An empty
+    // story can expose no paragraphs at all, so reading paragraphs[0] to identify
+    // the frame threw for every one of them and found nothing. An insertion point
+    // exists even in an empty story, so ask that first and keep the others as
+    // fallbacks. Duck-typed rather than `instanceof TextFrame`, which is one more
+    // assumption than this needs.
+    var frameStylesSeen = {};
+    function frameParaLeaf(item) {
+        var tries = [
+            function () { return item.insertionPoints[0].appliedParagraphStyle; },
+            function () { return item.parentStory.insertionPoints[0].appliedParagraphStyle; },
+            function () { return item.parentStory.paragraphs[0].appliedParagraphStyle; },
+            function () { return item.paragraphs[0].appliedParagraphStyle; }
+        ];
+        for (var i = 0; i < tries.length; i++) {
+            try {
+                var st = tries[i]();
+                if (st && st.isValid) return leafName(st);
+            } catch (e) {}
+        }
+        return "";
+    }
+
     function isTabFrame(item) {
-        try {
-            if (!(item instanceof TextFrame)) return false;
-            return leafName(item.parentStory.paragraphs[0].appliedParagraphStyle) === TAB_LEAF;
-        } catch (e) { return false; }
+        var leaf = frameParaLeaf(item);
+        if (leaf) frameStylesSeen[leaf] = (frameStylesSeen[leaf] || 0) + 1;
+        return leaf === TAB_LEAF;
     }
 
     // ---- 1. REBUILD: drop the overrides a previous run left ----------------
@@ -201,7 +224,11 @@
         if (!master || !master.isValid) continue;
 
         var target = null;
-        var mitems = master.pageItems.everyItem().getElements();
+        // allPageItems, not pageItems: the latter returns only top-level items and
+        // this kit is known to nest frames inside groups. Costs nothing here.
+        var mitems;
+        try { mitems = master.allPageItems; }
+        catch (e) { mitems = master.pageItems.everyItem().getElements(); }
         for (var m = 0; m < mitems.length; m++) {
             if (!isTabFrame(mitems[m])) continue;
             // a master spread has two pages; take the frame on this page's side
@@ -227,7 +254,24 @@
             + "\nheadings found: " + heads.length
             + "\nnumber read via: " + (numberForm || "-")
             + "\nprevious overrides cleared: " + cleared;
-    if (noFrame)  msg += "\npages with no tab frame on their master: " + noFrame;
+    if (noFrame) {
+        msg += "\npages with no tab frame on their master: " + noFrame;
+        if (placed === 0) {
+            // no frame recognised anywhere: show what the master frames DO look
+            // like, so the next run is a diagnosis and not another guess
+            msg += "\n\nparagraph styles found on master page items:\n";
+            var fnames = [], fk;
+            for (fk in frameStylesSeen) if (frameStylesSeen.hasOwnProperty(fk)) fnames.push(fk);
+            fnames.sort();
+            if (fnames.length === 0) {
+                msg += "  (none readable — no page item exposed a paragraph style)\n";
+            }
+            for (var z = 0; z < Math.min(fnames.length, 20); z++) {
+                msg += "  " + fnames[z] + " x" + frameStylesSeen[fnames[z]] + "\n";
+            }
+            msg += "\nexpected leaf name: " + TAB_LEAF + "\n";
+        }
+    }
     if (noNumber) msg += "\nheadings whose number could not be read: " + noNumber
                        + "  (numbering may be inactive or flattened)";
     if (log.length) {
