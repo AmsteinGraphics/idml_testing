@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-10T19:45:29.028Z
+  modified: 2026-08-11T00:14:26.058Z
 ---
 
 Surveyed from `manuals/dm32/dm32_print_manual_v1.76.idml` (2323 stories), re-measured 2026-08-10.
@@ -72,6 +72,12 @@ letter — hence the `[[A]]` markup for letter keys.
 `Σ • × ÷ ← √ – ± ⅟ ↓ ˣ → ▼ ▲ ² ⎷ Θ π ∫ ↑ σ ° ⭳ ⮀ ⭱ █ ¯ ᴇ χ ≤ ≥ ≠ · … ŷ ȳ Χ`, plus U+2009 THIN
 SPACE and U+00A0 NBSP used meaningfully. The map must be keyed PER FONT — Gintronic and SwissKeys
 Raster have different repertoires, which is what makes the lcd_normal font swap risky.
+
+**Defects the new font-coverage check found in test1/test2** (real, pre-existing, reported as
+WARNINGS so they don't fail the build): `•` U+2022 styled `btn_normal` ×19 — SwissKeys Buttons
+has no bullet glyph; and lowercase `e l m n u` styled `letter_normal` ×7 — SwissKeys Letters
+carries only 34 codepoints and no lowercase. Both print wrong today. Editorial calls, not
+toolchain bugs.
 
 **Two pre-existing defects in v1.76, not caused by this repo:**
 - 27 × `U+FFFD` inside `btn_bl` — a glyph lost before this repo existed; those buttons print

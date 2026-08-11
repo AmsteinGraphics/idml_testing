@@ -1,0 +1,65 @@
+# Glyph table for key markup — `NAME = glyph`.
+#
+# apply_key_markup.py looks a KEY NAME up here on its way to a button run, so an
+# author can type [SIGMA] instead of hunting for Σ in the glyph palette. LCD
+# content ({...}) is verbatim display text and is never looked up.
+#
+# UNMAPPED NAMES PASS THROUGH UNCHANGED, so [EXIT] needs no entry and this file
+# only ever holds the awkward characters. Expect to grow it against real output
+# rather than to get it right up front.
+#
+# A manual can override or extend this with its own <product>.map next to
+# <product>.manual; the first file found wins outright, so copy what you need.
+#
+# Names are case-sensitive and must not contain spaces or the closing bracket.
+
+# --- arithmetic and comparison ---------------------------------------------
+SIGMA      = Σ
+TIMES      = ×
+DIV        = ÷
+PLUSMINUS  = ±
+LE         = ≤
+GE         = ≥
+NE         = ≠
+DOT        = ·
+
+# --- roots, powers, calculus ------------------------------------------------
+SQRT       = √
+XROOT      = ⎷
+INTEGRAL   = ∫
+SQUARED    = ²
+EXP        = ˣ
+RECIP      = ⅟
+
+# --- arrows and motion ------------------------------------------------------
+LEFT       = ←
+RIGHT      = →
+UP         = ↑
+DOWN       = ↓
+UPTRI      = ▲
+DOWNTRI    = ▼
+SWAP       = ⮀
+STO        = ⭳
+RCL        = ⭱
+
+# --- greek ------------------------------------------------------------------
+PI         = π
+THETA      = Θ
+SIGMA_L    = σ
+CHI        = χ
+
+# --- display and typography -------------------------------------------------
+DEG        = °
+BLOCK      = █
+OVERBAR    = ¯
+ELLIPSIS   = …
+EE         = ᴇ
+YHAT       = ŷ
+YBAR       = ȳ
+
+# Two spacing characters that carry meaning in this manual and are invisible in
+# an editor, so they get names rather than being typed by hand. `U+XXXX` is
+# understood anywhere a glyph is expected — a literal thin space here would be
+# indistinguishable from a stray one, and the first tidy-up would delete it.
+THINSPACE  = U+2009
+NBSP       = U+00A0

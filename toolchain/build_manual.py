@@ -12,8 +12,9 @@ authored in IDML — InDesign never binds a hand-written anchored frame on impor
 so they are created natively by place_xref_boxes.jsx, inside InDesign, by a human.
 What this produces is the file to open and run that script on:
 
-    submission -> standardize -> hierarchy -> numbering -> sections -> tabs
-               -> dead-link suppression + audit -> validate -> <name>.ready.idml
+    submission -> standardize -> sync -> key markup -> hierarchy -> numbering
+               -> sections -> tabs -> dead-link suppression + audit
+               -> validate -> <name>.ready.idml
                                                                         |
                         open in InDesign, run place_xref_boxes.jsx, export IDML
                                                                         |
@@ -114,6 +115,11 @@ def main():
     # kit hands over to this manual's own ink ramp. Reports drift and changes
     # nothing unless the manual's config declares `sync`.
     run("sync_from_kit.py", build, *(["--kit", args.kit] if args.kit else []))
+    # AFTER sync, because it renders into character styles the kit owns and a
+    # manual may only just have received them. Forward-only and idempotent: an
+    # already-rendered run holds no markup, so a re-run is a no-op and nothing
+    # has to convert back. No-op on a manual whose authors type no markup.
+    run("apply_key_markup.py", build)
     run("restyle_heading_levels.py", build)   # no-op unless number_from is declared
     run("fix_numbering.py", build)
     run("sectionize.py", build)

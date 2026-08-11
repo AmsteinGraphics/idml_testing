@@ -1,16 +1,34 @@
 ---
 name: key-markup-proposal
-description: "Agreed design for plain-text key markup — syntax settled, architecture is FORWARD-ONLY and idempotent (no reverse transform). Ready to build."
+description: "Plain-text key markup — v1 BUILT and in the pipeline (forward-only, idempotent). What is done, what is deliberately not."
 metadata: 
   node_type: memory
   type: project
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-10T19:45:58.440Z
+  modified: 2026-08-11T00:14:18.672Z
 ---
 
-Agreed 2026-08-10, **not yet implemented**. Authors pour content in InDesign using plain-text
+Agreed 2026-08-10; **v1 built 2026-08-11**. Authors pour content in InDesign using plain-text
 conventions that the toolchain converts into real SwissKeys character styles, so nobody
 hand-applies `btn_normal`/`lcd_sk`. Encoding facts it rests on: [[swisskeys-encoding]].
+
+## What exists now
+
+`toolchain/apply_key_markup.py`, wired into `build_manual.py` right after `sync_from_kit`
+(the styles must exist before anything renders into them). `no_markup` added to the kit
+(37 character styles). `kit/swisskeys.map` holds the starter glyph table and understands
+`U+XXXX` for characters that are invisible in an editor. `toolchain/test_key_markup.py`
+guards the properties and runs in CI.
+
+**dm42n is the ideal first target for real markup**: its content uses exactly ONE character
+style, `$ID/[No character style]` (148 runs) — no SwissKeys styling at all. test2 is the
+opposite (17 styles, 267 `btn_normal`). Beware: a 4-file survey report read from the tail
+shows test2, not dm42n; I misattributed test2's counts to dm42n once already.
+
+STILL NOT DONE: `lcd_normal`/`lcd_table` have no agreed markup, so nothing emits them (the
+NBSP delimiter rule is encoded and waiting). Font coverage only checks runs whose CHARACTER
+style resolves to a font — body text inherits from the PARAGRAPH style, which is not
+resolved yet, so most prose is unchecked.
 
 ## ARCHITECTURE — forward-only and idempotent (changed 2026-08-10, user's insight)
 

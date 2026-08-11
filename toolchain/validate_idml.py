@@ -28,12 +28,28 @@ PKG = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"
 def local(t): return t.split('}', 1)[1] if '}' in t else t
 def reads(f): return open(f, encoding="utf-8").read()
 
-problems, checks = [], 0
+problems, warnings, checks = [], [], 0
 def check(cond, msg):
     global checks
     checks += 1
     if not cond:
         problems.append(msg)
+
+def warn(cond, msg):
+    """Report, but do not fail the build.
+
+    Everything `check` fails on is STRUCTURAL — a dangling reference or malformed
+    XML, something that stops InDesign opening the document, and something the
+    toolchain either caused or can fix. A warning is a CONTENT defect: real, worth
+    a human's attention, but an editorial call on someone's text. Failing the
+    build for those would mean a fixture's pre-existing debt blocks every unrelated
+    change, and the honest response to "19 bullets are styled as buttons" is to
+    look at them, not to stop the pipeline.
+    """
+    global checks
+    checks += 1
+    if not cond:
+        warnings.append(msg)
 
 # ---- 1. every XML well-formed ---------------------------------------------
 xmls = glob.glob(os.path.join(D, "**", "*.xml"), recursive=True)
@@ -360,6 +376,73 @@ if _chap:
           + ", ".join(f"{k} holds {v}" for k, v in list(crowded.items())[:4])
           + (" ..." if len(crowded) > 4 else ""))
 
+# ---- 10f. every character must exist in the font its style resolves to -----
+# IDML records font NAMES, never coverage, so a character the font has no glyph
+# for is invisible in the XML and only shows up on paper. v1.76 carries 27 x
+# U+FFFD inside btn_bl from a glyph lost years ago, and those buttons print
+# something wrong today with nothing having ever said so.
+#
+# Key markup raises the stakes: an author now types [SIGMA] and the toolchain
+# inserts the glyph, so a bad map entry becomes a missing glyph rather than a
+# typo somebody spots. It is also the safety net for changing lcd_normal's font.
+#
+# The licensed fonts are not on a CI runner, so a font that cannot be found is
+# REPORTED, never failed -- an unverifiable check must not turn every build red.
+import fontcov
+
+def _unescape(s):
+    s = re.sub(r"&#x([0-9A-Fa-f]+);", lambda m: chr(int(m.group(1), 16)), s)
+    s = re.sub(r"&#(\d+);", lambda m: chr(int(m.group(1))), s)
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"') \
+            .replace("&apos;", "'").replace("&amp;", "&")
+
+# InDesign's own spacing characters are not glyphs and are routinely absent from
+# a cmap while still setting correctly, so they are not evidence of anything.
+_IGNORE = set(range(0x00, 0x21)) | {0xA0, 0x2028, 0x2029, 0xFEFF} | set(range(0x2000, 0x200C))
+
+_font_of = fontcov.resolve_fonts(os.path.join(D, "Resources", "Styles.xml"))
+_doc_fonts = os.path.join(os.path.dirname(os.path.abspath(D.rstrip("/"))), "Document Fonts")
+_CSR = re.compile(r'<CharacterStyleRange\b([^>]*[^/])>(.*?)</CharacterStyleRange>', re.S)
+_missing, _absent_fonts, _replacement = {}, set(), []
+_checked_chars = 0
+for f in stories:
+    t = reads(f)
+    for m in _CSR.finditer(t):
+        attrs, body = m.group(1), m.group(2)
+        sm = re.search(r'AppliedCharacterStyle="CharacterStyle/([^"]+)"', attrs)
+        style = sm.group(1).replace("%3a", ":") if sm else ""
+        txt = _unescape("".join(re.findall(r'<Content>(.*?)</Content>', body, re.S)))
+        if not txt:
+            continue
+        if "�" in txt:
+            _replacement.append((style, txt.strip()[:40]))
+        fam = _font_of.get(style)
+        if not fam:
+            continue
+        cov = fontcov.coverage(fam, [_doc_fonts])
+        if cov is None:
+            _absent_fonts.add(fam)
+            continue
+        for ch in txt:
+            o = ord(ch)
+            if o in _IGNORE or o == 0xFFFD:
+                continue
+            _checked_chars += 1
+            if o not in cov:
+                _missing[(style, fam, ch)] = _missing.get((style, fam, ch), 0) + 1
+
+warn(not _replacement,
+     f"U+FFFD replacement character in {len(_replacement)} run(s) -- a glyph was lost "
+     f"before this document reached here, and those characters print wrong: "
+     + "; ".join(f"{s} {t!r}" for s, t in _replacement[:4]))
+warn(not _missing,
+      f"{len(_missing)} character(s) have no glyph in the font their style resolves to: "
+      + "; ".join(f"{ch!r} (U+{ord(ch):04X}) in {st} -> {fam} x{n}"
+                  for (st, fam, ch), n in sorted(_missing.items(), key=lambda kv: -kv[1])[:6]))
+font_report = (f"{_checked_chars} char(s) checked"
+               + (f"; NOT INSTALLED, unverified: {', '.join(sorted(_absent_fonts))}"
+                  if _absent_fonts else "; all fonts present"))
+
 # ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
 n_pd = sum(1 for ch in dm if local(ch.tag) == "HyperlinkPageDestination")
@@ -371,10 +454,16 @@ print(f"stories        : {len(story_ids)} on disk, {len(dm_story_refs)} declared
 print(f"spreads/masters: {len(spreads)}/{len(masters)}")
 print(f"residual hyperlinks/page-dests in designmap: {n_hl}/{n_pd}")
 print(f"swatch check   : {wl_report}")
+print(f"font coverage  : {font_report}")
 print(f"checks run     : {checks}")
+if warnings:
+    print(f"\nWARNINGS ({len(warnings)}) — content to look at, not a build failure:")
+    for w in warnings[:20]:
+        print("  !", w)
 if problems:
     print(f"\nPROBLEMS ({len(problems)}):")
     for p in problems[:40]:
         print("  -", p)
     sys.exit(1)
-print("\nOK - referential integrity clean")
+print("\nOK - referential integrity clean"
+      + (f" ({len(warnings)} warning(s) above)" if warnings else ""))

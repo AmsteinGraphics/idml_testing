@@ -116,6 +116,13 @@ jobs:
       # Three generations of the tracked InDesign round-trip catch that.
       # Runs even when a submission failed above: this tests the TOOLCHAIN against a
       # fixed fixture, so one manual's broken content must not stop it reporting.
+      - name: Key markup renders once and only once
+        if: '!cancelled()'
+        run: |
+          # forward-only means there is no reverse transform to catch a mistake:
+          # the guarantee is that a second pass changes nothing
+          python3 toolchain/test_key_markup.py
+
       - name: Re-entrancy fixpoint
         if: '!cancelled()'
         run: |
