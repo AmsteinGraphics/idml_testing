@@ -101,8 +101,10 @@ TOKEN = re.compile(r"""
       \\(?P<esc>[\[\]<>{}\\])                       # escaped literal
     | \[\[(?P<letter>[^\[\]\n]{1,%(n)d})\]\]        # letter key
     | \[(?P<btn>[^\[\]\n]{1,%(n)d})\]               # button
-    | <(?P<sn>[2-9]):(?P<stxt>[^<>\s\n]{0,%(n)d})>  # indexed shift; <2:> is its key
-    | <(?P<shift1>[^<>:\s\n]{0,%(n)d})>             # shift 1; <> is the shift key
+    | <(?P<sn>[2-9]):(?P<stxt>[^<>\s\n]{1,%(n)d})>  # indexed shift, named
+    | <(?P<snk>[2-9]):[^\S\n]{0,8}>                 # indexed shift KEY: <2:> or <2: >
+    | <(?P<shift1>[^<>:\s\n]{1,%(n)d})>             # shift 1, named
+    | <(?P<sk1>[^\S\n]{0,8})>                       # shift 1 KEY: <> or < >
     | \{\^/(?P<lcd_sh>[^{}\n]{0,%(n)d})\}           # LCD slanted + highlighted
     | \{\^(?P<lcd_h>[^{}\n]{0,%(n)d})\}             # LCD highlighted
     | \{/(?P<lcd_s>[^{}\n]{0,%(n)d})\}              # LCD slanted
@@ -219,7 +221,14 @@ def classify(m):
         return f"shift{g['sn']}", g["stxt"]
     if g["shift1"] is not None:
         return "shift1", g["shift1"]
-    raise AssertionError("unreachable")
+    # The shift KEY, written `<>` or with blanks between the brackets. Empty text
+    # is the signal render() keys off, so whatever was typed in there -- an em
+    # space in the DM42n submission -- is discarded rather than carried through.
+    if g["snk"] is not None:
+        return f"shift{g['snk']}", ""
+    if g["sk1"] is not None:
+        return "shift1", ""
+    raise AssertionError(f"TOKEN matched {m.group(0)!r} but no group claimed it")
 
 
 # --------------------------------------------------------------------------- #

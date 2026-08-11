@@ -48,6 +48,11 @@ STORY = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 \t\t</ParagraphStyleRange>
 \t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
 \t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+				<Content>Written with blanks: &lt; &gt; and &lt; &gt; and &lt;2: &gt;.</Content>
+\t\t\t</CharacterStyleRange>
+\t\t</ParagraphStyleRange>
+\t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
+\t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
 \t\t\t\t<Content>Escaped \\[EXIT\\] stays literal.</Content>
 \t\t\t</CharacterStyleRange>
 \t\t</ParagraphStyleRange>
@@ -133,6 +138,10 @@ def main():
         # exactly what v1.76 does (U+2039, four U+0020, U+203A).
         want(styled("shift_orange", "‹    ›"), "<> -> shift_orange blank key")
         want(styled("shift_blue", "‹    ›"), "<2:> -> shift_blue blank key")
+        # the dm42n submission writes it as < EM SPACE >, not empty:
+        # whitespace-only content between the brackets means the same key
+        want(out.count(chr(0x2039) + "    " + chr(0x203a)) >= 5,
+             "<>, < > and <em space> all render as the shift key")
         want(styled("code_styles%3alcd_sk", "ALL"), "{ALL} -> lcd_sk, bare")
         want(styled("code_styles%3alcd_sk_high", "HI"), "{^HI} -> lcd_sk_high")
         want(styled("code_styles%3alcd_sk_slant", "it"), "{/it} -> lcd_sk_slant")
