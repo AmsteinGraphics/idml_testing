@@ -28,6 +28,10 @@ the reference; `GUIDE.md` is the same thing for the user, in three steps.
   to their story on import — this was established exhaustively, and cost a lot of time.
   Anything anchored goes through `place_xref_boxes.jsx`, natively in InDesign. See
   `docs/handoff/memory/oblique-link-structure.md` before revisiting it.
+- **If it depends on composition, it belongs in JSX.** What is visible on a page is known
+  only after InDesign composes the text, so nothing here can compute it. That is why the
+  running tab number is `place_tab_numbers.jsx` and not Python, and why chapter detection
+  is per story rather than per heading.
 - **IDML ids must be lowercase hex** (`u<hex>`). Uppercase ids break the frame-to-story link.
 - Submissions arrive in authoring state with `dm32_list` numbering already active. The
   toolchain generates on top of that; it does not activate or flatten numbering.

@@ -82,11 +82,25 @@ It prints what it did and stops with either:
 
 ### Step 3 — Back in InDesign
 
-Open the `.ready.idml` file. Run `toolchain/place_xref_boxes.jsx`
-(*File ▸ Scripts*, double-click it). A dialog tells you how many margin boxes it made.
+Open the `.ready.idml` file, then run the scripts your manual needs from
+*File ▸ Scripts* (double-click). Each ends with a dialog reporting what it did.
 
-That step has to happen inside InDesign — margin boxes are the one thing that only
-InDesign can create properly. Everything else is automatic.
+| script | what it does | needed when |
+|---|---|---|
+| `place_xref_boxes.jsx` | oblique-ref margin boxes | the manual has underlined cross-references |
+| `place_tab_numbers.jsx` | the running number on each thumb tab | `tab_shows = paragraph_number` |
+
+**Run them in that order.** A margin box is anchored *inside* the text, so placing boxes
+can shift where a line falls — and therefore which heading is last on a page, which is
+exactly what the tab number is computed from. Numbers worked out before the boxes exist
+can be wrong by a page.
+
+Running one you don't need is harmless: it reports that it found nothing. DM42n, for
+instance, has no oblique links at all, so only the tab-number script does any work.
+
+These steps have to happen inside InDesign. Margin boxes are the one thing only InDesign
+can create properly, and the tab number depends on what is *visible on a page* — which
+nothing outside InDesign can know. Everything else is automatic.
 
 Now export IDML again. You have two choices, and this is the important bit:
 

@@ -90,6 +90,7 @@ python3 -c "import zipfile; zipfile.ZipFile('manuals/dm32/submissions/SUBMISSION
 | `toolchain/apply_tabs.py` | build one `S<k>-<title>` master per chapter owning a single tab + number on both pages, and apply it to that chapter's pages | `apply_tabs.py <dir> [--dry-run]` |
 | `toolchain/build_xref_boxes.py` | materialise oblique-link margin boxes; suppress dead links in place and log every decision to CSV | `build_xref_boxes.py <dir> --jsx [--log F]` |
 | `place_xref_boxes.jsx` | create the margin boxes **natively in InDesign** (hand-authored anchored frames never bind on import); rebuilds on re-run | run in InDesign |
+| `place_tab_numbers.jsx` | put the running section number on each thumb tab, under `tab_shows = paragraph_number`; rebuilds on re-run. Run it **after** the boxes — they are anchored in the text, so they can move a line and change which heading a page ends on | run in InDesign |
 | `toolchain/strip_xref_boxes.py` | inverse of `build_xref_boxes.py` — remove all margin boxes to manufacture a boxless submission | `strip_xref_boxes.py <dir> [--dry-run]` |
 | `toolchain/normalize_input.py` | take a finished manual back to submission state so the forward leg can run again — this is what makes the pipeline re-entrant | `normalize_input.py <dir> [--detect] [--dry-run]` |
 | `toolchain/finish_manual.py` | close the loop: underline cleanup + validate + repack on an export that has its boxes, **keeping** them | `finish_manual.py <export>.idml` |
