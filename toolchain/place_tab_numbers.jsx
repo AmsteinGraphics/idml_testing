@@ -40,22 +40,35 @@
     if (app.documents.length === 0) { alert("Open the manual document first."); return; }
     var doc = app.activeDocument;
 
-    var TAB_PARA = "foot_and_tabs:tab_right";   // the tab-number frame's paragraph style
-    var HEAD_PREFIX = "titles:lvl";             // numbered headings: lvl2, lvl3, lvl4
+    var TAB_LEAF = "tab_right";                 // foot_and_tabs:tab_right
     var MIN_LEVEL = 2;                          // lvl1 is a Part label and never counts
 
     var log = [], placed = 0, cleared = 0, noNumber = 0, noFrame = 0;
+    var seenStyles = {}, scanned = 0, matchedHeads = 0;
 
     // ---- helpers -----------------------------------------------------------
-    function paraStyleName(p) {
-        try { return p.appliedParagraphStyle.name; } catch (e) { return ""; }
+    // These styles live inside style GROUPS ($ID/titles, $ID/foot_and_tabs), and
+    // the DOM may report a grouped style's name as the leaf ("lvl2") or as the
+    // full path ("titles:lvl2") -- the IDML carries the path, InDesign often does
+    // not. Comparing against one spelling silently matched nothing and produced
+    // "no numbered headings found" with no clue why. Match on the LEAF, which is
+    // the same either way, and nothing else in this kit collides with it:
+    // "standard_olist_lvl2" and "toc:toc_lvl2" both fail /^lvl\d+$/.
+    function leafName(style) {
+        try {
+            var n = String(style.name);
+            var i = n.lastIndexOf(":");
+            return i >= 0 ? n.substring(i + 1) : n;
+        } catch (e) { return ""; }
     }
 
-    function headingLevel(name) {
-        // "titles:lvl3" -> 3, anything else -> 0
-        if (name.indexOf(HEAD_PREFIX) !== 0) return 0;
-        var n = parseInt(name.substring(HEAD_PREFIX.length), 10);
-        return isNaN(n) ? 0 : n;
+    function paraStyleLeaf(p) {
+        try { return leafName(p.appliedParagraphStyle); } catch (e) { return ""; }
+    }
+
+    function headingLevel(leaf) {
+        var m = /^lvl(\d+)$/.exec(leaf);
+        return m ? parseInt(m[1], 10) : 0;
     }
 
     function startPageOf(para) {
@@ -68,22 +81,36 @@
         } catch (e) { return null; }
     }
 
+    // The composed list number, WITHOUT the heading text. Which property carries
+    // it is version-dependent and untested here, so try the known spellings and
+    // record which one answered -- the first run tells us rather than us guessing.
+    var numberForm = null;
     function numberOf(para) {
-        // the composed list number, WITHOUT the heading text
-        try {
-            var n = para.numberingResultNumber;
-            if (n !== undefined && n !== null && String(n) !== "") {
-                return String(n).replace(/^\s+|[\s. ]+$/g, "");
+        var forms = [
+            ["numberingResultNumber", function (p) { return p.numberingResultNumber; }],
+            ["numberingResultString", function (p) { return p.numberingResultString; }],
+            ["bulletOrNumber",        function (p) { return p.bulletOrNumber; }]
+        ];
+        for (var i = 0; i < forms.length; i++) {
+            // once a form has answered, stay with it instead of re-probing 300 times
+            if (numberForm !== null && forms[i][0] !== numberForm) continue;
+            try {
+                var v = forms[i][1](para);
+                if (v !== undefined && v !== null && String(v) !== "") {
+                    var s = String(v).replace(/^\s+/, "").replace(/[\s.]+$/, "");
+                    if (s !== "") { numberForm = forms[i][0]; return s; }
+                }
+            } catch (e) {
+                if (log.length < 12) log.push(forms[i][0] + ": " + e);
             }
-        } catch (e) { log.push("numberingResultNumber failed: " + e); }
+        }
         return null;
     }
 
     function isTabFrame(item) {
         try {
             if (!(item instanceof TextFrame)) return false;
-            var ps = item.parentStory.paragraphs[0].appliedParagraphStyle.name;
-            return ps === TAB_PARA;
+            return leafName(item.parentStory.paragraphs[0].appliedParagraphStyle) === TAB_LEAF;
         } catch (e) { return false; }
     }
 
@@ -112,8 +139,12 @@
         try { paras = stories[st].paragraphs.everyItem().getElements(); }
         catch (e) { continue; }
         for (var p = 0; p < paras.length; p++) {
-            var lvl = headingLevel(paraStyleName(paras[p]));
+            scanned++;
+            var leaf = paraStyleLeaf(paras[p]);
+            if (leaf) seenStyles[leaf] = (seenStyles[leaf] || 0) + 1;
+            var lvl = headingLevel(leaf);
             if (lvl < MIN_LEVEL) continue;
+            matchedHeads++;
             var pg = startPageOf(paras[p]);
             if (pg === null) continue;                  // overset or unplaced
             var num = numberOf(paras[p]);
@@ -126,9 +157,29 @@
     });
 
     if (heads.length === 0) {
-        alert("No numbered headings with a resolvable list number were found.\n\n"
-              + "Numbering must be ACTIVE (titles:lvl2/3/4 joined to manual_list).\n"
-              + (log.length ? log[0] : ""));
+        // Say WHICH half failed. "Found nothing" on its own sent the last run
+        // hunting for a numbering problem when the real fault was style matching.
+        var msg = "No tab numbers could be worked out.\n\n"
+                + "paragraphs scanned: " + scanned + "\n"
+                + "matching a heading style (lvl" + MIN_LEVEL + "+): " + matchedHeads + "\n"
+                + "of those, number unreadable: " + noNumber + "\n\n";
+        if (matchedHeads === 0) {
+            msg += "No paragraph uses a style whose name ends in lvl2/lvl3/lvl4, so the\n"
+                 + "style names are not what this script expects. Styles actually seen:\n\n";
+            var names = [], k;
+            for (k in seenStyles) if (seenStyles.hasOwnProperty(k)) names.push(k);
+            names.sort();
+            for (var q = 0; q < Math.min(names.length, 25); q++) {
+                msg += "  " + names[q] + " x" + seenStyles[names[q]] + "\n";
+            }
+            if (names.length > 25) msg += "  ... and " + (names.length - 25) + " more\n";
+        } else {
+            msg += "The headings are there but their list numbers read as empty, so\n"
+                 + "numbering is INACTIVE or already flattened to plain text.\n"
+                 + "titles:lvl2/3/4 must be joined to manual_list as a NumberedList.\n";
+            if (log.length) msg += "\n" + log[0];
+        }
+        alert(msg);
         return;
     }
 
@@ -174,6 +225,7 @@
     // ---- 4. report ---------------------------------------------------------
     var msg = "Tab numbers placed: " + placed
             + "\nheadings found: " + heads.length
+            + "\nnumber read via: " + (numberForm || "-")
             + "\nprevious overrides cleared: " + cleared;
     if (noFrame)  msg += "\npages with no tab frame on their master: " + noFrame;
     if (noNumber) msg += "\nheadings whose number could not be read: " + noNumber
