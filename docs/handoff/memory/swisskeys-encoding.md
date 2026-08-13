@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ec08b19f-1946-4ee3-931e-87fdc5ed5cbf
-  modified: 2026-08-11T15:00:46.453Z
+  modified: 2026-08-13T22:45:28.267Z
 ---
 
 Surveyed from `manuals/dm32/dm32_print_manual_v1.76.idml` (2323 stories), re-measured 2026-08-10.
@@ -46,6 +46,15 @@ LCD name, and does NOT match the calculator's real LCD. The user may swap its fo
 - sibling `code_styles:code_sk` (791) — same font/size, program listings, para style `prgm_listing`
 
 Buttons: `btn` (SwissKeys 9.5) → `btn_normal` (Buttons, 1440) → `letter_normal` (Letters, 220),
+**SOFT-MENU LABELS** use `code_styles:lcd_inverted`, added to the kit 2026-08-14 (38 char
+styles, 25 mixed inks). It is based on `lcd_normal` and overrides only the colours. The
+"inverted" look is NOT a fill: `lcd_normal` carries a heavy underline (weight 10.339 at
+offset −2.4) and `lcd_inverted` recolours it to `MixedInk/menu_block` (Process Black +
+Warm Gray 1 U), so the rule behind the text becomes the block. **Transplanting the style
+alone leaves that underline pointing at a swatch the kit lacks** — the swatch has to
+travel with it. Markup is `{m:LABEL}`, centred in 5 cells; equal widths depend on the face
+being monospaced, which Gintronic is (panose says so; 605 of 608 advances identical).
+
 **THE SHIFT KEY ITSELF** is an EMPTY BUTTON in the shift colour: `U+2039` + four `U+0020` +
 `U+203A`, the run styled `shift_orange` (5×) or `shift_blue` (8×) — never `btn_or`/`btn_bl`, which
 carry a shifted FUNCTION's name. **The space glyph in the button font is the key body**, so four

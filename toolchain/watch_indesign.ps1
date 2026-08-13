@@ -24,18 +24,28 @@
     timer, the timer restarts on every further change, and the copy happens only
     once the file has been still for -QuietMs AND can be opened for reading.
 
+    THE LOCAL COPY. W:\...\toolchain_local_work\dm42n mirrors manuals/dm42n from
+    the repo -- submissions, out, and the .manual config. W: is a local NTFS
+    volume, not a mapped share, which is the whole point: InDesign can take its
+    lock there.
+
 .PARAMETER Source
-    Local folder holding the working files. Default: %USERPROFILE%\Documents\dm42n
+    Local folder to watch. Defaults to the submissions folder of the local work
+    copy, since that is the one whose writes have to reach the repo.
 
 .PARAMETER Dest
-    Folder in the repo to mirror into.
+    Folder in the repo to mirror into. Defaults to manuals/dm42n/submissions.
 
 .PARAMETER QuietMs
     How long a file must stop changing before it is copied. Default 2000.
 
 .EXAMPLE
     .\watch_indesign.ps1
-    .\watch_indesign.ps1 -Source D:\work\dm42n -Dest \\wsl.localhost\Ubuntu\home\emy\github\idml_testing\manuals\dm42n\submissions
+    Watches the dm42n submissions folder on W: and mirrors into the repo.
+
+.EXAMPLE
+    .\watch_indesign.ps1 -Source W:\...\toolchain_local_work\dm32\submissions -Dest \\wsl.localhost\Ubuntu\home\emy\github\idml_testing\manuals\dm32\submissions
+    The same for another manual.
 #>
 # ASCII ONLY, deliberately. Windows PowerShell 5.1 reads a .ps1 as ANSI unless the
 # file carries a UTF-8 BOM, and this repo writes files as UTF-8 without one. An
@@ -44,8 +54,8 @@
 
 [CmdletBinding()]
 param(
-    [string] $Source  = (Join-Path $env:USERPROFILE 'Documents\dm42n'),
-    [string] $Dest    = '\\wsl.localhost\Ubuntu\home\emy\github\idml_testing\manuals\dm42n\submissions',
+    [string] $Source = 'W:\______FASTWORK______\SwissMicros\manuals\dm42_print_manual\toolchain_local_work\dm42n\submissions',
+    [string] $Dest   = '\\wsl.localhost\Ubuntu\home\emy\github\idml_testing\manuals\dm42n\submissions',
     [string[]] $Extensions = @('.indd', '.idml'),
     [int]    $QuietMs = 2000
 )
@@ -102,24 +112,41 @@ function Copy-WhenSettled {
     $final = Join-Path $Dest $name
     $temp  = "$final.part"
 
-    for ($attempt = 1; $attempt -le 10; $attempt++) {
+    # Two different things can be locked, and saying which one saves a lot of
+    # guessing: the SOURCE while InDesign is still writing the save, or the
+    # DESTINATION when something still holds the repo's copy open -- which is
+    # exactly what happens if InDesign was opened from the repo path before.
+    for ($attempt = 1; $attempt -le 12; $attempt++) {
         if (-not (Test-Path -LiteralPath $Path)) { return }
-        if (Test-Readable $Path) {
-            try {
-                Copy-Item -LiteralPath $Path -Destination $temp -Force
-                if (Test-Path -LiteralPath $final) { Remove-Item -LiteralPath $final -Force }
-                Rename-Item -LiteralPath $temp -NewName $name -Force
-                $size = (Get-Item -LiteralPath $final).Length
-                Write-Log ("copied {0}  ({1:N0} bytes)" -f $name, $size) 'Green'
-                return
-            } catch {
-                Write-Log "copy of $name failed (try $attempt): $($_.Exception.Message)" 'Yellow'
-                if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
-            }
+        if (-not (Test-Readable $Path)) {
+            Start-Sleep -Milliseconds 500
+            continue                                  # still being written; not an error
         }
-        Start-Sleep -Milliseconds 500
+        try {
+            Copy-Item -LiteralPath $Path -Destination $temp -Force
+            if (Test-Path -LiteralPath $final) { Remove-Item -LiteralPath $final -Force }
+            Rename-Item -LiteralPath $temp -NewName $name -Force
+            $size = (Get-Item -LiteralPath $final).Length
+            Write-Log ("copied {0}  ({1:N0} bytes)" -f $name, $size) 'Green'
+            return
+        } catch {
+            if (Test-Path -LiteralPath $temp) {
+                Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+            }
+            if ($attempt -eq 1) {
+                $who = if (Test-Path -LiteralPath $final) {
+                    if (Test-Readable $final) { 'source' } else { 'DESTINATION' }
+                } else { 'source' }
+                Write-Log ("{0}: {1} is locked, retrying" -f $name, $who) 'Yellow'
+            }
+            Start-Sleep -Milliseconds (300 * $attempt)   # back off rather than hammer
+        }
     }
-    Write-Log "gave up on $name - still locked after 10 tries" 'Red'
+    $held = (Test-Path -LiteralPath $final) -and -not (Test-Readable $final)
+    Write-Log ("gave up on {0} - {1} still locked. {2}" -f $name,
+               $(if ($held) { 'the copy in the repo is' } else { 'the local file is' }),
+               $(if ($held) { 'Close it in InDesign; a document opened from the repo path holds it.' }
+                 else { 'Still being written?' })) 'Red'
 }
 
 # ---- watch ------------------------------------------------------------------
@@ -135,7 +162,13 @@ function Copy-WhenSettled {
 # `since`  : path -> when the signature last changed
 # `copied` : path -> the signature already mirrored, so a settled file is copied
 #            once rather than every pass
+#
+# The first pass PRIMES rather than copies. A file that merely exists is not a
+# write: mirroring everything at startup would push the local copy over whatever
+# is in the repo, which is wrong whenever the repo's copy is the newer one --
+# straight after a build, say. Only a change observed while watching gets copied.
 $seen = @{}; $since = @{}; $copied = @{}
+$priming = $true
 
 function Get-Signature {
     param([System.IO.FileInfo] $Item)
@@ -164,8 +197,22 @@ try {
             if ($copied[$path] -eq $sig) { continue }        # this state is already mirrored
             if (($now - $since[$path]).TotalMilliseconds -lt $QuietMs) { continue }
 
+            if ($priming) {
+                $copied[$path] = $sig                        # note it, do not push it
+                continue
+            }
             Copy-WhenSettled $path
             $copied[$path] = $sig
+        }
+
+        if ($priming -and $files) {
+            # Everything present at startup is now a baseline; from here on only
+            # changes are mirrored.
+            $stable = @($files | Where-Object { $copied.ContainsKey($_.FullName) }).Count
+            if ($stable -eq @($files).Count) {
+                $priming = $false
+                Write-Log ("baseline taken for {0} file(s); watching for changes" -f $stable) 'Cyan'
+            }
         }
 
         Start-Sleep -Milliseconds 500

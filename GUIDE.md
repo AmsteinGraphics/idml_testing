@@ -24,6 +24,49 @@ GitHub then does two things, neither of which is milling:
 
 It cannot finish a manual — no InDesign, so it cannot run the JSX in step 3.
 
+### If the repo lives in WSL: keep InDesign's copy on a local disk
+
+Only applies when the repo sits inside WSL and InDesign runs on Windows. Skip this on a
+native Linux or macOS machine.
+
+**Don't open documents from `\\wsl.localhost\...`.** InDesign takes ownership of a
+document by writing a `.idlk` lock beside it and holding a file lock. `\\wsl.localhost` is
+a UNC path served by a network redirector, not a local disk, and that locking is
+unreliable there. When InDesign can't take the lock it opens the document **[Read-Only]**
+instead of saying why. Adobe doesn't support opening documents from network volumes at
+all.
+
+It is not a permissions problem, and checking permissions will waste your time: Windows
+can create and delete files in that folder perfectly well, and neither file carries the
+read-only attribute. The lock is the whole story — one day a `.idlk` appears, the next it
+doesn't.
+
+So give InDesign a working copy on a local drive, and mirror its saves back:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu\home\emy\github\idml_testing\toolchain\watch_indesign.ps1
+```
+
+Leave that window open while you work. Every time you save, it copies the file into the
+repo and logs a line; `Ctrl-C` stops it. It waits until a file has stopped changing *and*
+can be read before copying, because a save is several writes and a rename — copying at the
+first sign of change gives you a truncated document.
+
+Three things worth knowing:
+
+- **It goes one way only**, local → repo. Edit the repo's copy directly and your next save
+  will overwrite it.
+- **It takes a baseline at startup and copies nothing**, so starting it can't push an old
+  local file over a fresh build. Only changes made while it watches are mirrored.
+- **`-ExecutionPolicy Bypass` is needed** because Windows classifies anything under
+  `\\wsl.localhost` as Internet-zone, and the machine policy is `RemoteSigned`. The flag
+  applies to that one run; nothing on the machine changes. Don't fix it with
+  `Set-ExecutionPolicy Unrestricted`.
+
+If a file won't mirror, the log names which end is stuck. "The copy in the repo is still
+locked" means InDesign has that file open **from the repo path** — the situation this
+section exists to avoid. Close it there and reopen the local copy.
+
 ## What this thing is for
 
 You write and lay out the manual in InDesign. But a few jobs are miserable by hand and
