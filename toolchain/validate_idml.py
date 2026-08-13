@@ -446,6 +446,150 @@ font_report = (f"{_checked_chars} char(s) checked"
                + (f"; NOT INSTALLED, unverified: {', '.join(sorted(_absent_fonts))}"
                   if _absent_fonts else "; all fonts present"))
 
+# ---- 10g. a list must be closed by an empty line ---------------------------
+# House rule: the last item of a bulleted or numbered list is followed by an empty
+# paragraph, so the list is separated from whatever prose comes next. Without it
+# the first line after the list reads as another item.
+#
+# IDML groups consecutive same-styled paragraphs into ONE ParagraphStyleRange with
+# <Br/> between them, so paragraphs are counted per container -- the story itself,
+# and each table cell -- rather than per range.
+LIST_STYLE = re.compile(r"(?:^|:)(?:standard_|stadard_|table_)?[uo]list", re.I)
+
+def _paras_of(container):
+    """[(paragraph style, text)] for one Story or Cell, in document order."""
+    seq = []
+    for psr in container:
+        if local(psr.tag) != "ParagraphStyleRange":
+            continue
+        pstyle = urllib.parse.unquote(psr.get("AppliedParagraphStyle", "")
+                                      ).replace("ParagraphStyle/", "")
+        buf, parts, ended_on_br = "", [], False
+        for el in psr.iter():
+            if local(el.tag) == "Content":
+                buf += "".join(el.itertext())
+                ended_on_br = False
+            elif local(el.tag) == "Br":
+                parts.append(buf)
+                buf = ""
+                ended_on_br = True
+        parts.append(buf)
+        # A range ending in <Br/> terminates its last paragraph; the empty string
+        # after that break is not a paragraph of its own. Keeping it made every
+        # list look as though it ended with a blank item, so the check reported
+        # the right ranges for the wrong reason and named no text.
+        if ended_on_br and parts and parts[-1] == "":
+            parts.pop()
+        for txt in parts:
+            seq.append((pstyle, txt))
+    return seq
+
+unclosed, unclosed_before_heading = [], []
+for f in stories:
+    try:
+        root = ET.parse(f).getroot()
+    except ET.ParseError:
+        continue
+    containers = [el for el in root.iter() if local(el.tag) in ("Story", "Cell")]
+    for c in containers:
+        seq = _paras_of(c)
+        for i, (pstyle, txt) in enumerate(seq):
+            if not LIST_STYLE.search(pstyle):
+                continue
+            if i + 1 >= len(seq):
+                continue                       # list ends the container: nothing to separate
+            nstyle, ntxt = seq[i + 1]
+            if LIST_STYLE.search(nstyle):
+                continue                       # still inside the list
+            if not ntxt.strip():
+                continue                       # the empty line is there
+            rec = (os.path.relpath(f, D), txt.strip()[:34], nstyle, ntxt.strip()[:34])
+            (unclosed_before_heading if nstyle.startswith("titles:") else unclosed).append(rec)
+
+warn(not unclosed,
+     f"{len(unclosed)} list(s) run straight into the following paragraph with no empty "
+     f"line between: "
+     + "; ".join(f"{p}: ...{a!r} -> {s} {b!r}" for p, a, s, b in unclosed[:4])
+     + (f" (+{len(unclosed_before_heading)} more where the next paragraph is a heading, "
+        f"which may not need one)" if unclosed_before_heading else ""))
+
+# ---- 10h. every zero must be the slashed zero ------------------------------
+# A slashed zero is an OpenType feature, not a separate codepoint: the digit stays
+# U+0030 and OTFSlashedZero decides how it prints. So a bare "0" is not evidence
+# of anything on its own -- what matters is the value in force on the run, which
+# comes from the run itself, else its character style, else its paragraph style.
+# v1.76 sets it on 340 ranges, so this is an established house rule rather than a
+# new one.
+def _style_table(tag):
+    """style id -> (own OTFSlashedZero or None, BasedOn id or None)."""
+    raw_s = reads(os.path.join(D, "Resources", "Styles.xml"))
+    out = {}
+    for m in re.finditer(r"<" + tag + r"\b[^>]*?\bSelf=\"([^\"]+)\"(.*?)</" + tag + r">"
+                         r"|<" + tag + r"\b[^>]*?\bSelf=\"([^\"]+)\"[^>]*?/>", raw_s, re.S):
+        sid = m.group(1) or m.group(3)
+        blk = m.group(0)
+        own = re.search(r'OTFSlashedZero="(true|false)"', blk)
+        based = re.search(r"<BasedOn[^>]*>([^<]+)</BasedOn>", blk)
+        out[sid] = (own.group(1) if own else None, based.group(1).strip() if based else None)
+    return out
+
+_pstyles, _cstyles = _style_table("ParagraphStyle"), _style_table("CharacterStyle")
+
+def _resolve_zero(sid, table, seen=None):
+    seen = seen or set()
+    while sid and sid not in seen:
+        seen.add(sid)
+        own, based = table.get(sid, (None, None))
+        if own is not None:
+            return own == "true"
+        sid = based
+    return None
+
+_zero_bad = {}
+for f in stories:
+    t = reads(f)
+    if "0" not in t:
+        continue
+    for pm in re.finditer(r'<ParagraphStyleRange\b([^>]*)>(.*?)</ParagraphStyleRange>', t, re.S):
+        pattrs, pbody = pm.group(1), pm.group(2)
+        pstyle = (re.search(r'AppliedParagraphStyle="([^"]+)"', pattrs) or [None, ""])[1]
+        p_local = re.search(r'OTFSlashedZero="(true|false)"', pattrs)
+        for cm in re.finditer(r'<CharacterStyleRange\b([^>]*[^/])>(.*?)</CharacterStyleRange>',
+                              pbody, re.S):
+            cattrs, cbody = cm.group(1), cm.group(2)
+            txt = "".join(re.findall(r"<Content>(.*?)</Content>", cbody, re.S))
+            n = txt.count("0")
+            if not n:
+                continue
+            c_local = re.search(r'OTFSlashedZero="(true|false)"', cattrs)
+            cstyle = (re.search(r'AppliedCharacterStyle="([^"]+)"', cattrs) or [None, ""])[1]
+            if c_local:
+                on = c_local.group(1) == "true"
+            else:
+                on = _resolve_zero(cstyle, _cstyles)
+                if on is None:
+                    on = (p_local.group(1) == "true") if p_local else _resolve_zero(pstyle, _pstyles)
+            if on:
+                continue
+            cname = urllib.parse.unquote(cstyle).replace("CharacterStyle/", "")
+            # Name the FONT as well as the style. Whether a zero needs the OpenType
+            # feature depends on the typeface: a display face may already draw its
+            # zero slashed, in which case the run is fine as it stands. Grouping by
+            # font is what makes the report actionable instead of a flat count.
+            fam = _font_of.get(cname) or "(from the paragraph style)"
+            key = (fam, cname or "[none]")
+            hit = _zero_bad.setdefault(key, [0, ""])
+            hit[0] += n
+            if not hit[1]:
+                hit[1] = txt.strip()[:30]
+
+_zero_total = sum(v[0] for v in _zero_bad.values())
+warn(not _zero_bad,
+     f"{_zero_total} zero(s) do not have the slashed zero switched on "
+     f"(OTFSlashedZero), by font: "
+     + "; ".join(f"{fam} via {c} x{n} e.g. {s!r}"
+                 for (fam, c), (n, s) in sorted(_zero_bad.items(), key=lambda kv: -kv[1][0])[:6]))
+
 # ---- 11. no leftover Hyperlinks pointing nowhere (content graph gone) ------
 n_hl = sum(1 for ch in dm if local(ch.tag) == "Hyperlink")
 n_pd = sum(1 for ch in dm if local(ch.tag) == "HyperlinkPageDestination")

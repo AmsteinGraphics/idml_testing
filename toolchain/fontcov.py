@@ -208,9 +208,16 @@ def resolve_fonts(styles_xml):
     """
     raw = open(styles_xml, encoding="utf-8").read()
     own, based, names = {}, {}, {}
-    for m in re.finditer(r'<CharacterStyle\b[^>]*?Self="CharacterStyle/([^"]+)"[^>]*>(.*?)'
-                         r'</CharacterStyle>', raw, re.S):
-        sid, body = m.group(1), m.group(2)
+    # BOTH forms, self-closing first. A style with no properties is written
+    # `<CharacterStyle ... />`, and matching only the paired form made the regex
+    # run on to the NEXT `</CharacterStyle>` and hand that style's body to this
+    # one -- which is how `$ID/[No character style]` came out as Wingdings 3,
+    # borrowing the definition of `dings` that follows it in the file.
+    for m in re.finditer(r'<CharacterStyle\b[^>]*?Self="CharacterStyle/([^"]+)"[^>]*?/>'
+                         r'|<CharacterStyle\b[^>]*?Self="CharacterStyle/([^"]+)"[^>]*?>'
+                         r'((?:(?!<CharacterStyle\b).)*?)</CharacterStyle>', raw, re.S):
+        sid = m.group(1) or m.group(2)
+        body = m.group(3) or ""
         names[sid] = sid.replace("%3a", ":")
         f = re.search(r"<AppliedFont[^>]*>([^<]+)</AppliedFont>", body)
         b = re.search(r"<BasedOn[^>]*>([^<]+)</BasedOn>", body)
