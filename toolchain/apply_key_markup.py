@@ -15,6 +15,7 @@ applies `btn_normal` or `lcd_sk`.
     <>                  <    >                shift_orange      (the shift KEY)
     <2:>                <    >                shift_blue        (2nd shift key)
     {ALL}  {1 2/3}      verbatim              lcd_sk            (bare)
+    {m:D}  {m:FGHI}     <  D  >  < FGHI >     lcd_inverted      (centred in 5 cells)
     {^...} {/...}       verbatim              lcd_sk_high / _slant
     {^/...}             verbatim              lcd_sk_slant_high
     \\[  \\<  \\{  \\\\ literal character     no_markup
@@ -72,8 +73,23 @@ TARGET = {
     "lcd_h":  "code_styles:lcd_sk_high",
     "lcd_s":  "code_styles:lcd_sk_slant",
     "lcd_sh": "code_styles:lcd_sk_slant_high",
+    "menu":   "code_styles:lcd_inverted",
 }
 NO_MARKUP = "no_markup"
+
+# A soft-menu label occupies a fixed number of character cells, so the six items
+# divide the display into equal regions whatever they say. The width is in CELLS,
+# not millimetres, which only works because the face is monospaced -- it is today
+# (lcd_inverted inherits Gintronic, which its panose byte and its 605-of-608
+# identical advances both confirm) and the face that replaces it will be too.
+#
+# Five is deliberate: more makes the label look far wider than the region it
+# stands for on the real display.
+MENU_CELLS = 5
+# Where the odd space goes when the label cannot be centred exactly. Left, to
+# match how the labels were padded by hand: a four-character label came out as
+# " FGHI", not "FGHI ".
+MENU_EXTRA_LEFT = True
 
 # what wraps the content, per style. Anything absent here is bare.
 NBSP = "\u00a0"
@@ -99,12 +115,14 @@ MAX_TOKEN = 40
 
 TOKEN = re.compile(r"""
       \\(?P<esc>[\[\]<>{}\\])                       # escaped literal
+    | (?<!\w)m\[(?P<oldmenu>[^\[\]\n]{0,%(n)d})\]   # RETIRED menu form -- reported, see below
     | \[\[(?P<letter>[^\[\]\n]{1,%(n)d})\]\]        # letter key
     | \[(?P<btn>[^\[\]\n]{1,%(n)d})\]               # button
     | <(?P<sn>[2-9]):(?P<stxt>[^<>\s\n]{1,%(n)d})>  # indexed shift, named
     | <(?P<snk>[2-9]):[^\S\n]{0,8}>                 # indexed shift KEY: <2:> or <2: >
     | <(?P<shift1>[^<>:\s\n]{1,%(n)d})>             # shift 1, named
     | <(?P<sk1>[^\S\n]{0,8})>                       # shift 1 KEY: <> or < >
+    | \{m:(?P<menu>[^{}\n]{0,%(n)d})\}              # soft-menu label, padded to MENU_CELLS
     | \{\^/(?P<lcd_sh>[^{}\n]{0,%(n)d})\}           # LCD slanted + highlighted
     | \{\^(?P<lcd_h>[^{}\n]{0,%(n)d})\}             # LCD highlighted
     | \{/(?P<lcd_s>[^{}\n]{0,%(n)d})\}              # LCD slanted
@@ -191,8 +209,30 @@ def shift_symbol_name(kind):
     return "SHIFT" if n == "1" else "SHIFT" + n
 
 
+def menu_label(text, cells=None):
+    """Centre a soft-menu label in a fixed number of cells, or None if it is too long.
+
+    Padding is what makes six labels divide the display evenly, so the author
+    writes `{m:D}` and gets the spacing rather than counting spaces by hand --
+    which had already drifted: one four-character label was padded 1+0 and a
+    one-character label 2+2.
+
+    Too long is NOT truncated. A silently shortened label reads as a real one and
+    would survive proofing; reported and left as written, it does not.
+    """
+    cells = MENU_CELLS if cells is None else cells
+    text = text.strip()
+    if len(text) > cells:
+        return None
+    slack = cells - len(text)
+    left = (slack + 1) // 2 if MENU_EXTRA_LEFT else slack // 2
+    return " " * left + text + " " * (slack - left)
+
+
 def render(kind, text, glyphs):
     """(style, content) for a matched token; content None if it cannot be built."""
+    if kind == "menu":
+        return TARGET[kind], menu_label(text)
     if kind.startswith("shift") and text == "":
         style = SHIFT_KEY_STYLE.get(kind)
         if style is None:
@@ -213,8 +253,15 @@ def classify(m):
     g = m.groupdict()
     if g["esc"] is not None:
         return "escape", g["esc"]
-    for kind, key in (("letter", "letter"), ("btn", "btn"), ("lcd_sh", "lcd_sh"),
-                      ("lcd_h", "lcd_h"), ("lcd_s", "lcd_s"), ("lcd", "lcd")):
+    # The retired `m[LABEL]` form. It has to be matched, and matched FIRST, or the
+    # button rule claims the brackets and the `m` is left as stray text -- which
+    # is what it did: nine menu items would have printed as buttons with a
+    # lowercase m in front of each, and nothing would have said so.
+    if g["oldmenu"] is not None:
+        return "oldmenu", g["oldmenu"]
+    for kind, key in (("letter", "letter"), ("btn", "btn"), ("menu", "menu"),
+                      ("lcd_sh", "lcd_sh"), ("lcd_h", "lcd_h"), ("lcd_s", "lcd_s"),
+                      ("lcd", "lcd")):
         if g[key] is not None:
             return kind, g[key]
     if g["sn"] is not None:
@@ -381,6 +428,12 @@ def transform_story(path, glyphs, have, stats, problems, dry_run=False):
                     kind, body = classify(m)
                     if kind == "escape":
                         style, content = NO_MARKUP, body
+                    elif kind == "oldmenu":
+                        problems.append(
+                            f"{m.group(0)!r} uses the retired menu form; write "
+                            f"{{m:{body.strip()}}} instead — the label is centred in "
+                            f"{MENU_CELLS} cells for you, so it needs no padding")
+                        continue                       # left as literal text below
                     elif kind not in TARGET:
                         problems.append(
                             f"{m.group(0)!r} asks for shift {kind[5:]}, which has no style")
@@ -388,7 +441,11 @@ def transform_story(path, glyphs, have, stats, problems, dry_run=False):
                     else:
                         style, content = render(kind, body, glyphs)
                     if style is None or content is None:
-                        problems.append(f"{m.group(0)!r} could not be built")
+                        problems.append(
+                            f"{m.group(0)!r} is longer than the {MENU_CELLS} cells a "
+                            f"menu label has; shorten it (never truncated here, because "
+                            f"a shortened label reads as a real one)"
+                            if kind == "menu" else f"{m.group(0)!r} could not be built")
                         continue                       # left as literal text below
                     if style not in have:
                         problems.append(

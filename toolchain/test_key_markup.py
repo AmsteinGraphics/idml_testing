@@ -43,6 +43,11 @@ STORY = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 \t\t</ParagraphStyleRange>
 \t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
 \t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+\t\t\t\t<Content>Menu row: {m:D} {m:FGHI} {m:ABCDE} then a key.</Content>
+\t\t\t</CharacterStyleRange>
+\t\t</ParagraphStyleRange>
+\t\t<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
+\t\t\t<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
 \t\t\t\t<Content>Press the shift key &lt;&gt; then &lt;2:&gt; for the second.</Content>
 \t\t\t</CharacterStyleRange>
 \t\t</ParagraphStyleRange>
@@ -101,7 +106,36 @@ def want(cond, label):
         fails.append(label)
 
 
+def check_menu_padding():
+    """The cell arithmetic, tested directly — it needs no document.
+
+    A soft-menu label is centred in a fixed number of cells so that six of them
+    divide the display evenly whatever they say. This only holds while the face
+    is monospaced, which is a standing requirement on whichever font ends up
+    behind lcd_inverted, not an accident of the current one.
+    """
+    sys.path.insert(0, HERE)
+    import apply_key_markup as K
+
+    print("\n--- menu label padding (%d cells) ---" % K.MENU_CELLS)
+    cases = [
+        ("D", "  D  ", "one character centres 2+2"),
+        ("FGHI", " FGHI", "four characters put the odd space on the LEFT"),
+        ("ABCDE", "ABCDE", "a full-width label is untouched"),
+        ("AB", "  AB ", "two characters centre 2+1"),
+        ("ABC", " ABC ", "three characters centre 1+1"),
+    ]
+    for label, expect, why in cases:
+        got = K.menu_label(label)
+        want(got == expect, f"{why}: {label!r} -> {got!r}")
+        want(got is None or len(got) == K.MENU_CELLS,
+             f"  ...and occupies exactly {K.MENU_CELLS} cells")
+    want(K.menu_label("TOOLONG") is None,
+         "a label longer than the cells is refused, not truncated")
+
+
 def main():
+    check_menu_padding()
     work = tempfile.mkdtemp(prefix="keymarkup_")
     try:
         with zipfile.ZipFile(KIT) as z:
@@ -115,7 +149,10 @@ def main():
             print(r.stdout.rstrip())
             if r.stderr.strip():
                 print("STDERR:", r.stderr.strip())
+            said.append(r.stdout)
             return r.returncode
+
+        said = []
 
         print("=== pass 1 " + "=" * 56)
         rc1 = run()
@@ -142,6 +179,19 @@ def main():
         # whitespace-only content between the brackets means the same key
         want(out.count(chr(0x2039) + "    " + chr(0x203a)) >= 5,
              "<>, < > and <em space> all render as the shift key")
+        # lcd_inverted lives in the dm42n submission and has not reached the kit,
+        # which this fixture is built from. Assert whichever is true, so the test
+        # passes now and starts asserting the rendering the moment the kit gains
+        # the style, rather than being disabled and forgotten.
+        kit_has_inverted = "lcd_inverted" in open(
+            os.path.join(work, "Resources", "Styles.xml"), encoding="utf-8").read()
+        if kit_has_inverted:
+            want(styled("code_styles%3alcd_inverted", "  D  "),
+                 "{m:D} -> lcd_inverted, centred in 5 cells")
+        else:
+            want("{m:D}" in out and "needs character style" in "".join(said),
+                 "{m:D} reports the missing lcd_inverted style and leaves the markup "
+                 "(kit has no lcd_inverted yet)")
         want(styled("code_styles%3alcd_sk", "ALL"), "{ALL} -> lcd_sk, bare")
         want(styled("code_styles%3alcd_sk_high", "HI"), "{^HI} -> lcd_sk_high")
         want(styled("code_styles%3alcd_sk_slant", "it"), "{/it} -> lcd_sk_slant")
@@ -166,7 +216,14 @@ def main():
         rc2 = run()
         want(open(story, encoding="utf-8").read() == out,
              "second pass byte-identical -- f(f(x)) == f(x)")
-        want(rc1 == 0 and rc2 == 0, f"both passes exit 0 (got {rc1}, {rc2})")
+        # Until the kit carries lcd_inverted, the menu tokens are correctly
+        # reported as unrenderable and the exit code says so. That report is
+        # itself the proof that `{m:D}` classified as a MENU token rather than
+        # being swallowed by the plain `{...}` LCD rule.
+        expect = 0 if kit_has_inverted else 1
+        want(rc1 == expect and rc2 == expect,
+             f"both passes exit {expect} (got {rc1}, {rc2})"
+             + ("" if kit_has_inverted else " — the kit has no lcd_inverted yet"))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
